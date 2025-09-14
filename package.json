@@ -30,6 +30,7 @@
     "test": "node --test",
     "test:coverage": "c8 --reporter=text --reporter=lcov npm test",
     "commitlint": "commitlint --from=origin/main --to=HEAD --verbose",
+    "setup:hooks": "git config core.hooksPath .husky",
     "prepare": "npm run build"
   },
   "keywords": [
