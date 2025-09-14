@@ -9,6 +9,7 @@ Tiny, robust SDK for Fluxomail’s REST + SSE APIs. Focused on minutes-to-first-
 - Typed errors and request IDs for supportability
 - Safe defaults: retries for idempotent reads, SSE auto-reconnect, no secrets in browser
 - Works in Node >= 18 and modern browsers
+- v1 API alignment; cc/bcc/attachments support; iterate/paging helper
 
 ## Install
 
@@ -33,16 +34,35 @@ await fm.sends.send({
   subject: 'Hello',
   html: '<h1>Hi!</h1>',
   idempotencyKey: 'req-123',
+  // Optional:
+  cc: ['c1@example.com'],
+  bcc: 'b1@example.com',
+  attachments: [
+    { filename: 'report.pdf', content: await fs.promises.readFile('report.pdf'), contentType: 'application/pdf' }
+  ]
 })
 
-// Backfill events
+// Backfill events (iterator auto-pages; respects Retry-After)
+for await (const evt of fm.events.iterate({ types: ['email.delivered'], limit: 100 })) {
+  console.log('event', evt)
+}
+
+// Or single page
 const { events, nextCursor } = await fm.events.list({
   types: ['email.delivered'],
   limit: 100,
 })
 
 // Realtime events (works in Node and browser)
-const sub = fm.events.subscribe({ types: ['email.*'] }, (evt) => {
+// In browsers, provide getToken() to refresh a short‑lived token and checkpoint to resume
+const sub = fm.events.subscribe({
+  types: ['email.*'],
+  getToken: () => fetch('/api/fluxomail/token', { method: 'POST', body: JSON.stringify({ organizationId }) }).then(r => r.json()).then(x => x.token),
+  checkpoint: {
+    get: () => localStorage.getItem('fluxo:lastEventId') || undefined,
+    set: (id) => localStorage.setItem('fluxo:lastEventId', id)
+  }
+}, (evt) => {
   console.log('event', evt)
 })
 
@@ -77,13 +97,16 @@ fluxomail events tail --api-key $FLUXOMAIL_API_KEY --types email.*
 
 ```ts
 new Fluxomail({
-  baseUrl?: string // default: https://api.fluxomail.com
+  baseUrl?: string // default: https://api.fluxomail.com/api/v1
   apiKey?: string, // server-side only
   token?: string,  // short-lived token for browser/Node
   version?: string // API date header, default e.g. 2025-09-01
   timeoutMs?: number // default: 15_000
   fetch?: typeof fetch // custom fetch if needed
   userAgent?: string // adds to UA in Node (browser ignores)
+  allowApiKeyInBrowser?: boolean // default false; throws if apiKey used in browser
+  beforeRequest?: (ctx) => void | Promise<void> // hook for logging/metrics
+  afterResponse?: (ctx) => void | Promise<void> // hook for logging/metrics
 })
 ```
 
@@ -134,3 +157,4 @@ We welcome contributions! Please see `CONTRIBUTING.md` for local setup, testing,
 ## Code of Conduct
 
 This project follows the Contributor Covenant. By participating, you agree to uphold our `CODE_OF_CONDUCT.md`. For issues, email support@fluxomail.com.
+- Use `getToken` in `events.subscribe` for auto-refresh and `checkpoint` to resume after reloads.

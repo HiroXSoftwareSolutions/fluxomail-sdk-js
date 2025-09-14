@@ -1,6 +1,6 @@
 {
   "name": "@fluxomail/sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fluxomail SDK for JS/TS: send emails, list/subscribe to events, get timelines.",
   "type": "module",
   "main": "dist/index.js",
@@ -24,11 +24,11 @@
   },
   "sideEffects": false,
   "scripts": {
-    "build": "tsup src/index.ts --dts --format esm --clean",
-    "dev": "tsup src/index.ts --dts --format esm --watch",
+    "build": "tsup src/index.ts --dts --format esm --sourcemap --clean",
+    "dev": "tsup src/index.ts --dts --format esm --sourcemap --watch",
     "pretest": "npm run build",
     "test": "node --test",
-    "test:coverage": "c8 --reporter=text --reporter=lcov npm test",
+    "test:coverage": "c8 --reporter=text --reporter=lcov --exclude=bin/** --exclude=tests/** --exclude=**/src/events/stream.ts npm test",
     "commitlint": "commitlint --from=origin/main --to=HEAD --verbose",
     "setup:hooks": "git config core.hooksPath .husky",
     "prepare": "npm run build"
@@ -55,14 +55,14 @@
   },
   "preferGlobal": true,
   "dependencies": {
-    "eventsource": "^2.0.2"
+    "eventsource": "4.0.0"
   },
   "devDependencies": {
-    "tsup": "^8.1.0",
-    "typescript": "^5.6.3",
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
     "c8": "^9.1.0",
     "husky": "^9.1.6",
-    "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0"
+    "tsup": "^8.1.0",
+    "typescript": "^5.6.3"
   }
 }
