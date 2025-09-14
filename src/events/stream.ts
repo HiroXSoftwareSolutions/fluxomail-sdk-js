@@ -30,8 +30,11 @@ export function subscribe<T = unknown>(client: HttpClient, opts: SubscribeOption
     if (token) url.searchParams.set('token', token);
 
     if (isNode()) {
-      const { default: NodeEventSource } = await import('eventsource');
-      es = new (NodeEventSource as unknown as typeof EventSource)(url.toString(), {
+      const mod = await import('eventsource');
+      const NodeEventSource = (mod as unknown as { default?: typeof EventSource; EventSource?: typeof EventSource }).default
+        ?? (mod as unknown as { EventSource?: typeof EventSource }).EventSource;
+      if (!NodeEventSource) throw new Error('EventSource polyfill not available');
+      es = new NodeEventSource(url.toString(), {
         // @ts-expect-error NodeEventSource supports headers, but TS may not recognize on EventSource type
         headers: { Accept: 'text/event-stream' },
       }) as unknown as EventSource;
