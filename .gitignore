@@ -1,0 +1,26 @@
+# Node / build
+node_modules/
+dist/
+.turbo/
+.cache/
+.DS_Store
+
+# Env / local
+.env
+.env.*
+.npmrc
+
+# Editor
+.idea/
+.vscode/
+
+# Local notes (keep private)
+PLANS.md
+plans.md
+notes.local.md
+TODO.md
+examples/**/.env.local
+coverage/
+
+# npm pack tarballs
+*.tgz
