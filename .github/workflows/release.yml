@@ -22,16 +22,5 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm pack --dry-run
-      - name: Publish to npm (OIDC preferred, token fallback)
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -e
-          if [ -n "${NPM_TOKEN}" ]; then
-            echo "Using NPM_TOKEN secret"
-            npm config set //registry.npmjs.org/:_authToken ${NPM_TOKEN}
-            npm publish --access public
-          else
-            echo "Using GitHub OIDC (Trusted Publishing)"
-            npm publish --provenance --access public
-          fi
+      - name: Publish to npm with provenance (OIDC)
+        run: npm publish --provenance --access public
