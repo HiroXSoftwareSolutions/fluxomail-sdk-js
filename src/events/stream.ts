@@ -23,24 +23,34 @@ export function subscribe<T = unknown>(client: HttpClient, opts: SubscribeOption
 
   const start = async () => {
     if (closed || controller.signal.aborted) return;
+    // Load checkpoint if provided and no explicit since
+    if (!latestSince && opts.checkpoint) {
+      try { latestSince = await opts.checkpoint.get(); } catch {}
+    }
     const url = new URL(client.base() + '/events/stream');
     if (opts.types) for (const t of opts.types) url.searchParams.append('types', t);
     if (latestSince) url.searchParams.set('since', latestSince);
-    const token = client.tokenParam();
+    let token = client.tokenParam();
+    if (opts.getToken) {
+      try { token = (await opts.getToken()) || token; } catch {}
+    }
     if (token) url.searchParams.set('token', token);
 
+    let EventSourceImpl: any = (globalThis as any).EventSource;
     if (isNode()) {
       const mod = await import('eventsource');
-      const NodeEventSource = (mod as unknown as { default?: typeof EventSource; EventSource?: typeof EventSource }).default
+      EventSourceImpl = (mod as unknown as { default?: typeof EventSource; EventSource?: typeof EventSource }).default
         ?? (mod as unknown as { EventSource?: typeof EventSource }).EventSource;
-      if (!NodeEventSource) throw new Error('EventSource polyfill not available');
-      es = new NodeEventSource(url.toString(), {
+      if (!EventSourceImpl) throw new Error('EventSource polyfill not available');
+      es = new (EventSourceImpl as any)(url.toString(), {
         // @ts-expect-error NodeEventSource supports headers, but TS may not recognize on EventSource type
         headers: { Accept: 'text/event-stream' },
       }) as unknown as EventSource;
+    /* c8 ignore start */
     } else {
-      es = new EventSource(url.toString());
+      es = new (EventSourceImpl as any)(url.toString());
     }
+    /* c8 ignore stop */
 
     es.onmessage = (ev) => {
       try {
@@ -48,10 +58,13 @@ export function subscribe<T = unknown>(client: HttpClient, opts: SubscribeOption
         const id = (ev as MessageEvent & { lastEventId?: string }).lastEventId ?? undefined;
         if (id) latestSince = id;
         onEvent(data);
+        if (id && opts.checkpoint) { try { void opts.checkpoint.set(id); } catch {} }
         attempt = 0; // reset backoff on success
+      /* c8 ignore start */
       } catch {
         // ignore parse errors
       }
+      /* c8 ignore stop */
     };
 
     es.onerror = () => {

@@ -7,7 +7,7 @@ test('CLI send prints JSON and passes idempotency', async () => {
   let receivedIdemp = undefined;
   let body = '';
   const server = await startTestServer({
-    'POST /sends': async (req, res, url) => {
+    'POST /emails/send': async (req, res, url) => {
       receivedIdemp = req.headers['idempotency-key'];
       for await (const chunk of req) body += chunk;
       res.setHeader('Content-Type', 'application/json');
@@ -27,9 +27,8 @@ test('CLI send prints JSON and passes idempotency', async () => {
     assert.equal(receivedIdemp, 'ci-1');
     const parsedBody = JSON.parse(body || '{}');
     assert.equal(parsedBody.subject, 'Hi');
-    assert.equal(parsedBody.text, 'Hello');
+    assert.equal(parsedBody.content, 'Hello');
   } finally {
     await server.close();
   }
 });
-

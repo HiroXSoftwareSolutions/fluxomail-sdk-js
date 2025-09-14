@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Minimal Fluxomail CLI: send, events list, events tail (SSE)
+// Fluxomail CLI: send, events list, events tail (SSE)
 import process from 'node:process';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 async function loadSdk() {
   const url = new URL('../dist/index.js', import.meta.url).href;
@@ -13,8 +15,10 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const [k, v] = a.slice(2).split('=');
-      if (v !== undefined) args[k] = v;
-      else args[k] = argv[i + 1]?.startsWith('--') ? true : argv[++i];
+      const val = v !== undefined ? v : (argv[i + 1]?.startsWith('--') ? true : argv[++i]);
+      if (args[k] === undefined) args[k] = val;
+      else if (Array.isArray(args[k])) args[k].push(val);
+      else args[k] = [args[k], val];
     } else {
       args._.push(a);
     }
@@ -33,7 +37,7 @@ Commands:
 
 Global options:
   --api-key <key>           API key (or env FLUXOMAIL_API_KEY)
-  --base <url>              API base URL (default https://api.fluxomail.com)
+  --base <url>              API base URL (default https://api.fluxomail.com/api/v1)
   --version <date>          API version header (default 2025-09-01)
 
 Send options:
@@ -43,6 +47,9 @@ Send options:
   --text <text>
   --html <html>
   --idempotency <key>
+  --cc <email[,email]>
+  --bcc <email[,email]>
+  --attach <path[:mime][:name]>   (repeat to add multiple)
 
 Events list options:
   --types <csv>             e.g., email.delivered,email.opened or email.*
@@ -80,7 +87,22 @@ async function main() {
     if (!apiKey) { console.error('Missing --api-key or FLUXOMAIL_API_KEY'); process.exit(2); }
     if (!to || !subject || (!text && !html)) { console.error('send requires --to, --subject and one of --text/--html'); process.exit(2); }
     const toList = to.includes(',') ? to.split(',').map(s=>s.trim()).filter(Boolean) : to;
-    const res = await fm.sends.send({ to: toList, from: args.from, subject, text, html, idempotencyKey: idemp });
+    // cc/bcc parsing
+    const cc = args.cc ? String(args.cc).split(',').map(s=>s.trim()).filter(Boolean) : undefined;
+    const bcc = args.bcc ? String(args.bcc).split(',').map(s=>s.trim()).filter(Boolean) : undefined;
+    // attachments parsing (repeatable flag)
+    const attachArgs = args.attach ? (Array.isArray(args.attach) ? args.attach : [args.attach]) : [];
+    const attachments = [];
+    for (const spec of attachArgs) {
+      const s = String(spec);
+      const parts = s.split(':');
+      const p = parts[0];
+      const mime = parts[1] || undefined;
+      const name = parts[2] || path.basename(p);
+      const buf = await readFile(p);
+      attachments.push({ filename: name, content: new Uint8Array(buf), ...(mime ? { contentType: mime } : {}) });
+    }
+    const res = await fm.sends.send({ to: toList, from: args.from, subject, text, html, cc, bcc, attachments: attachments.length ? attachments : undefined, idempotencyKey: idemp });
     console.log(JSON.stringify(res, null, 2));
     return;
   }

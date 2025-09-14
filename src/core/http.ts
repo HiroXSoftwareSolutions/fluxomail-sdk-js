@@ -1,8 +1,9 @@
 import { Auth } from './auth.js';
+import pkg from '../../package.json';
 import { FluxomailError, NetworkError, TimeoutError, classifyHttpError, RateLimitError } from './errors.js';
 import type { ClientConfig, Json } from './types.js';
 
-const DEFAULT_BASE_URL = 'https://api.fluxomail.com';
+const DEFAULT_BASE_URL = 'https://api.fluxomail.com/api/v1';
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_VERSION = '2025-09-01';
 
@@ -41,15 +42,22 @@ export class HttpClient {
   private readonly runtimeUA: string;
   private readonly customFetch?: typeof fetch;
   private readonly userAgentExtra?: string;
+  private readonly beforeRequest?: (ctx: { method: string; url: string; headers: Headers; body?: Json }) => void | Promise<void>;
+  private readonly afterResponse?: (ctx: { method: string; url: string; status: number; headers: Headers; requestId?: string }) => void | Promise<void>;
 
   constructor(cfg: ClientConfig) {
     this.baseUrl = (cfg.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
+    if (!isNode() && cfg.apiKey && !cfg.allowApiKeyInBrowser) {
+      throw new Error('Fluxomail SDK: Do not use apiKey in the browser. Use a short-lived token.');
+    }
     this.auth = new Auth({ apiKey: cfg.apiKey, token: cfg.token });
     this.version = cfg.version ?? DEFAULT_VERSION;
     this.timeoutMs = cfg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.customFetch = cfg.fetch;
     this.userAgentExtra = cfg.userAgent;
     this.runtimeUA = isNode() ? `node/${process.version}` : 'browser';
+    this.beforeRequest = cfg.beforeRequest;
+    this.afterResponse = cfg.afterResponse;
   }
 
   private get fetchImpl(): typeof fetch {
@@ -65,7 +73,8 @@ export class HttpClient {
     });
     if (isNode()) {
       // Many servers ignore UA from browsers; set only in Node
-      const baseUA = `fluxomail-sdk-js/0.1.0 (${this.runtimeUA})`;
+      const version = (pkg as any)?.version || '0.0.0';
+      const baseUA = `fluxomail-sdk-js/${version} (${this.runtimeUA})`;
       const ua = this.userAgentExtra ? `${baseUA} ${this.userAgentExtra}` : baseUA;
       headers.set('User-Agent', ua);
     }
@@ -94,14 +103,16 @@ export class HttpClient {
     const headers = this.makeHeaders({ ...opts.headers });
     if (opts.idempotencyKey) headers.set('Idempotency-Key', opts.idempotencyKey);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? this.timeoutMs);
-
     const maxAttempts = 3;
     let lastErr: unknown;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? this.timeoutMs);
+        if (this.beforeRequest) {
+          await this.beforeRequest({ method, url, headers, body: opts.body });
+        }
         const res = await this.fetchImpl(url, {
           method,
           headers,
@@ -114,6 +125,7 @@ export class HttpClient {
           // Try to parse as JSON, but allow empty body
           const text = await res.text();
           clearTimeout(timeout);
+          if (this.afterResponse) await this.afterResponse({ method, url, status: res.status, headers: res.headers, requestId });
           return (text ? (JSON.parse(text) as T) : (undefined as unknown as T));
         }
 
@@ -129,12 +141,18 @@ export class HttpClient {
         if (this.shouldRetry(method, res.status) && attempt < maxAttempts - 1) {
           const retryAfter = res.status === 429 ? Number(res.headers.get('retry-after')) : undefined;
           const wait = retryAfter && !Number.isNaN(retryAfter) ? retryAfter * 1000 : jitteredBackoff(attempt);
+          clearTimeout(timeout);
+          if (this.afterResponse) await this.afterResponse({ method, url, status: res.status, headers: res.headers, requestId });
           await sleep(wait);
           continue;
         }
 
         clearTimeout(timeout);
-        throw classifyHttpError(res.status, body, requestId);
+        // Include Retry-After as ms for rate limit errors, when present
+        const retryAfterHeader = res.status === 429 ? res.headers.get('retry-after') : null;
+        const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : undefined;
+        if (this.afterResponse) await this.afterResponse({ method, url, status: res.status, headers: res.headers, requestId });
+        throw classifyHttpError(res.status, body, requestId, retryAfterMs);
       } catch (err) {
         lastErr = err;
         if (err instanceof FluxomailError) throw err;

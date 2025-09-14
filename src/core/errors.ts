@@ -65,7 +65,7 @@ export class TimeoutError extends FluxomailError {
   }
 }
 
-export function classifyHttpError(status: number, body: unknown, requestId?: string): FluxomailError {
+export function classifyHttpError(status: number, body: unknown, requestId?: string, retryAfterMs?: number): FluxomailError {
   // Attempt to parse an error envelope with code/message
   const asObj = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : undefined;
   const code = (asObj?.code as string | undefined) ?? undefined;
@@ -75,7 +75,7 @@ export function classifyHttpError(status: number, body: unknown, requestId?: str
   if (status === 403) return new PermissionDeniedError(message ?? 'Permission denied', { requestId });
   if (status === 404) return new NotFoundError(message ?? 'Not found', { requestId });
   if (status === 422) return new ValidationError(message ?? 'Validation error', { requestId, details: asObj?.details });
-  if (status === 429) return new RateLimitError(message ?? 'Rate limited', { requestId });
+  if (status === 429) return new RateLimitError(message ?? 'Rate limited', { requestId, retryAfterMs });
 
   const err = new FluxomailError(message ?? 'Request failed', { code: code ?? 'http_error', status, requestId, details: body });
   return err;

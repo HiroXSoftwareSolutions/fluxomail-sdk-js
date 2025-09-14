@@ -14,6 +14,7 @@ import type {
 import { HttpClient } from './core/http.js';
 import { listEvents } from './events/list.js';
 import { subscribe } from './events/stream.js';
+import { iterateEvents } from './events/iterate.js';
 import { sendEmail } from './sends/send.js';
 import { getTimeline } from './timelines/get.js';
 
@@ -32,6 +33,7 @@ export class Fluxomail {
     return {
       list: <T = unknown>(opts: ListEventsOptions = {}): Promise<ListEventsResponse<T>> => listEvents<T>(client, opts),
       subscribe: <T = unknown>(opts: SubscribeOptions, onEvent: EventHandler<T>): Subscription => subscribe<T>(client, opts, onEvent),
+      iterate: <T = unknown>(opts: ListEventsOptions = {}) => iterateEvents<T>(client, opts),
     } as const;
   }
 
