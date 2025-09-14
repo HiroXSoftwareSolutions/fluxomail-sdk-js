@@ -55,7 +55,7 @@
   },
   "preferGlobal": true,
   "dependencies": {
-    "eventsource": "^2.0.2"
+    "eventsource": "^4.0.0"
   },
   "devDependencies": {
     "tsup": "^8.1.0",
