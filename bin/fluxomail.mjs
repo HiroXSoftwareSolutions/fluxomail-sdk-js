@@ -59,6 +59,7 @@ Events tail options:
 async function main() {
   const [, , ...argv] = process.argv;
   if (argv.length === 0) { usage(); process.exit(1); }
+  if (argv.includes('--help') || argv.includes('-h')) { usage(); process.exit(0); }
   const args = parseArgs(argv);
   const cmd = args._[0];
   const sub = args._[1];
@@ -114,4 +115,3 @@ main().catch((err) => {
   console.error(err?.stack || err?.message || String(err));
   process.exit(1);
 });
-
