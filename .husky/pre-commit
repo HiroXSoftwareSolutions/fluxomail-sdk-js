@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+
+echo "[husky] Pre-commit: build + fast tests"
+
+# Explicit local build to catch TS/build errors early
+npm run build || exit 1
+
+# Run unit tests directly (skip npm pretest to avoid double build)
+node scripts/run-tests.mjs || exit 1
+
+# Optional: pack contents check to avoid accidental file leaks
+npm run ci:pack-check || exit 1
+
+echo "[husky] Pre-commit checks passed"
