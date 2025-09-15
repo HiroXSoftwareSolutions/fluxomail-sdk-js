@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project uses SemVer. During 0.x, breaking changes may occur in minor versions.
 
+## [0.3.2](https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/compare/v0.3.1...v0.3.2) (2025-09-15)
+
+
+### Bug Fixes
+
+* **pkg:** align repository/bugs URLs with repo for npm provenance ([#23](https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/issues/23)) ([28310bd](https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/commit/28310bd395a1978a5d7e9df6d412517888a5b332))
+
 ## [0.3.1](https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/compare/v0.3.0...v0.3.1) (2025-09-15)
 
 
