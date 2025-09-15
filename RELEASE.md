@@ -38,6 +38,15 @@ Publish
    - Workflow: .github/workflows/release.yml
    - Uses OIDC provenance (npm publish --provenance --access public)
 
+Manual bump (no new code)
+------------------------
+- Option A (preferred): trigger Release Please with a specific version
+  - Actions -> "Release Please" -> Run workflow -> set input release_as (e.g., 0.3.3)
+  - Approve & merge the release PR; publish runs automatically
+- Option B: create a minimal patch commit
+  - Open a PR with a conventional commit like "fix(release): housekeeping" (no functional changes)
+  - After merge, Release Please will propose a patch release PR
+
 Post-release
 ------------
 - Verify: npm view @fluxomail/sdk version
@@ -49,4 +58,3 @@ Notes
 - During 0.x, breaking changes may occur in minor versions; keep CHANGELOG clear.
 - Keep src/gen/openapi-types.ts generated and committed; CI guards drift when var is set.
 - main is prod; tags drive publish.
-
