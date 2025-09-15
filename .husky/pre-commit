@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+echo "[husky] Pre-commit: running fast test suite"
+
+# Run unit tests (Node 18/20 compatible wrapper)
+npm test || exit 1
+
+# Optional: pack contents check to avoid accidental file leaks
+npm run ci:pack-check || exit 1
+
+echo "[husky] Pre-commit checks passed"
+
