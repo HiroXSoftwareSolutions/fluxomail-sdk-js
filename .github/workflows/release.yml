@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -33,7 +37,23 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm whoami || true
+      - name: Compute version
+        id: ver
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+      - name: Check if version already on npm
+        id: exists
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          echo "Checking npm for version $V"
+          if npm view @fluxomail/sdk versions --json | jq -e ". | index(\"$V\")" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Version $V already published; skipping publish"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish to npm with provenance
+        if: steps.exists.outputs.exists == 'false'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
