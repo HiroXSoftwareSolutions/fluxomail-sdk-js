@@ -191,3 +191,53 @@ export function isEmailEventType(type: string): type is EmailEventType {
     type === 'email.dropped'
   );
 }
+
+export interface IterateEventsOptions extends ListEventsOptions {
+  signal?: AbortSignal;
+  maxPages?: number;
+}
+
+// Attachments
+export interface Attachment {
+  filename: string;
+  content: string | Uint8Array; // raw or base64 string
+  contentType?: string;
+}
+
+// Typed event unions (baseline)
+export type EmailEventType =
+  | 'email.sent'
+  | 'email.delivered'
+  | 'email.opened'
+  | 'email.clicked'
+  | 'email.bounced'
+  | 'email.complained'
+  | 'email.failed'
+  | 'email.dropped';
+
+export interface EmailEventDataBase {
+  sendId: string;
+  providerMessageId?: string;
+  metadata?: Record<string, unknown>;
+  [k: string]: unknown;
+}
+
+export type EventDataByType<K extends EmailEventType> = EmailEventDataBase;
+
+export type EmailEventEnvelope<K extends EmailEventType = EmailEventType> = Omit<EventEnvelope, 'type' | 'data'> & {
+  type: K;
+  data: EventDataByType<K>;
+};
+
+export function isEmailEventType(type: string): type is EmailEventType {
+  return (
+    type === 'email.sent' ||
+    type === 'email.delivered' ||
+    type === 'email.opened' ||
+    type === 'email.clicked' ||
+    type === 'email.bounced' ||
+    type === 'email.complained' ||
+    type === 'email.failed' ||
+    type === 'email.dropped'
+  );
+}
