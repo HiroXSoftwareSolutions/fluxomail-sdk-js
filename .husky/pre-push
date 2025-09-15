@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "[husky] Pre-push: running local checks"
+
+# Optional: OpenAPI codegen drift (runs only if FLUXOMAIL_OPENAPI is set)
+if [ -n "$FLUXOMAIL_OPENAPI" ]; then
+  echo "[husky] Codegen drift check using FLUXOMAIL_OPENAPI=$FLUXOMAIL_OPENAPI"
+  npm run ci:codegen-check || exit 1
+else
+  echo "[husky] Skipping codegen drift (FLUXOMAIL_OPENAPI not set)"
+fi
+
+# Run tests (wrapper handles Node 18/20 differences)
+npm test || exit 1
+
+# Ensure package contents are clean before publishing
+npm run ci:pack-check || exit 1
+
+echo "[husky] Pre-push checks passed"
+
