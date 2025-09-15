@@ -50,11 +50,11 @@
   "author": "Fluxomail",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fluxomail/fluxomail-sdk-js.git"
+    "url": "https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js"
   },
   "homepage": "https://docs.fluxomail.com/api-reference/fluxomail/cli",
   "bugs": {
-    "url": "https://github.com/fluxomail/fluxomail-sdk-js/issues"
+    "url": "https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/issues"
   },
   "license": "Apache-2.0",
   "publishConfig": {
