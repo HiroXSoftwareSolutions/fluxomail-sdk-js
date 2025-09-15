@@ -9,17 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Git ref to publish (e.g., refs/tags/v0.3.0)'
+        description: 'Git ref to publish (e.g., refs/tags/v0.3.3)'
         required: false
         default: ''
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: true
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: true
 
 concurrency:
   group: release-${{ github.ref }}
