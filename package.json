@@ -31,7 +31,7 @@
     "build": "npm run codegen:openapi && npm run build:dist",
     "dev": "tsup src/index.ts --dts --format esm --sourcemap --watch",
     "pretest": "npm run build",
-    "test": "node --test --test-timeout=20000",
+    "test": "node scripts/run-tests.mjs",
     "smoke:e2e": "node scripts/smoke-e2e.mjs",
     "test:coverage": "c8 --reporter=text --reporter=lcov --exclude=bin/** --exclude=tests/** --exclude=**/src/events/stream.ts npm test",
     "commitlint": "commitlint --from=origin/main --to=HEAD --verbose",
