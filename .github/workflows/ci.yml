@@ -25,4 +25,4 @@ jobs:
         if: ${{ env.FLUXOMAIL_OPENAPI != '' }}
         run: npm run ci:codegen-check
       - run: npm test
-      - run: npm pack --dry-run
+      - run: npm run ci:pack-check

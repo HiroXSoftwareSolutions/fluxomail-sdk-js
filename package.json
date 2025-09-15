@@ -26,6 +26,7 @@
   "scripts": {
     "codegen:openapi": "node scripts/generate-openapi-types.mjs",
     "ci:codegen-check": "npm run codegen:openapi && node scripts/codegen-check.mjs",
+    "ci:pack-check": "node scripts/check-pack.mjs",
     "build:dist": "tsup src/index.ts --dts --format esm --sourcemap --clean",
     "build": "npm run codegen:openapi && npm run build:dist",
     "dev": "tsup src/index.ts --dts --format esm --sourcemap --watch",
