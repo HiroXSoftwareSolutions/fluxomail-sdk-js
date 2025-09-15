@@ -1,7 +1,39 @@
 import type { HttpClient } from '../core/http.js';
 import type { SendEmailRequest, SendEmailResponse, Attachment } from '../core/types.js';
+import type { OpenAPISendResponseBody } from '../core/openapi.js';
+import { asOpenAPISendBody } from '../core/openapi.js';
 
-function buildBody(req: SendEmailRequest): Record<string, unknown> {
+async function toBase64(content: string | Uint8Array | Blob): Promise<string> {
+  // String: treat as base64 if it looks like it; else encode
+  if (typeof content === 'string') {
+    const looksB64 = /^[A-Za-z0-9+/=\r\n]+$/.test(content) && content.length % 4 === 0;
+    if (looksB64) return content;
+    if (typeof Buffer !== 'undefined') return Buffer.from(content, 'utf8').toString('base64');
+    // @ts-ignore btoa may not exist in Node
+    return btoa(content);
+  }
+  // Uint8Array
+  if (content instanceof Uint8Array) {
+    if (typeof Buffer !== 'undefined') return Buffer.from(content).toString('base64');
+    let s = '';
+    for (let i = 0; i < content.length; i++) s += String.fromCharCode(content[i]);
+    // @ts-ignore btoa may not exist in Node
+    return btoa(s);
+  }
+  // Blob/File (browser or Node >=18)
+  if (typeof (content as Blob).arrayBuffer === 'function') {
+    const ab = await (content as Blob).arrayBuffer();
+    if (typeof Buffer !== 'undefined') return Buffer.from(ab).toString('base64');
+    let s = '';
+    const view = new Uint8Array(ab);
+    for (let i = 0; i < view.length; i++) s += String.fromCharCode(view[i]);
+    // @ts-ignore btoa may not exist in Node
+    return btoa(s);
+  }
+  throw new Error('Unsupported attachment content type');
+}
+
+async function buildBody(req: SendEmailRequest): Promise<Record<string, unknown>> {
   const to = req.to;
   const subject = req.subject;
   const content = req.content ?? req.text;
@@ -13,6 +45,9 @@ function buildBody(req: SendEmailRequest): Record<string, unknown> {
     subject,
     ...(content ? { content } : {}),
     ...(htmlContent ? { htmlContent } : {}),
+    ...(req.templateId ? { templateId: req.templateId } : {}),
+    ...(req.variables ? { variables: req.variables } : {}),
+    ...(req.personalizations ? { personalizations: req.personalizations } : {}),
     ...(fromEmail ? { fromEmail } : {}),
     ...(fromName ? { fromName } : {}),
     ...(req.replyTo ? { replyTo: req.replyTo } : {}),
@@ -23,39 +58,26 @@ function buildBody(req: SendEmailRequest): Record<string, unknown> {
     ...(req.headers ? { headers: req.headers } : {}),
   };
   if (req.attachments && req.attachments.length > 0) {
-    const enc = (a: Attachment) => {
-      let b64: string | undefined;
-      if (typeof a.content === 'string') {
-        // assume already base64 if it looks like; else base64-encode string
-        const looksB64 = /^[A-Za-z0-9+/=\r\n]+$/.test(a.content) && a.content.length % 4 === 0;
-        b64 = looksB64 ? a.content : (typeof Buffer !== 'undefined' ? Buffer.from(a.content, 'utf8').toString('base64') : btoa(a.content));
-      } else {
-        // Uint8Array
-        if (typeof Buffer !== 'undefined') b64 = Buffer.from(a.content).toString('base64');
-        else {
-          let s = '';
-          const bytes = a.content as Uint8Array;
-          for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-          // @ts-ignore btoa may not exist in Node
-          b64 = btoa(s);
-        }
-      }
-      return { filename: a.filename, contentBase64: b64!, ...(a.contentType ? { contentType: a.contentType } : {}) };
+    const enc = async (a: Attachment) => {
+      const b64 = await toBase64(a.content as any);
+      return { filename: a.filename, contentBase64: b64, ...(a.contentType ? { contentType: a.contentType } : {}) };
     };
-    body.attachments = req.attachments.map(enc);
+    body.attachments = await Promise.all(req.attachments.map(enc));
   }
-  return body;
+  // Prepare for OpenAPI body adoption (no runtime change)
+  return asOpenAPISendBody(body) as unknown as Record<string, unknown>;
 }
 
 export async function sendEmail(client: HttpClient, req: SendEmailRequest): Promise<SendEmailResponse> {
   const { idempotencyKey, idempotentRetry } = req;
-  const payload = buildBody(req);
+  const payload = await buildBody(req);
   const attempts = Math.max(1, Number(idempotentRetry || 1));
   let lastErr: unknown = undefined;
   for (let i = 0; i < attempts; i++) {
     try {
       // Public API path: POST /api/v1/emails/send
-      return await client.request('POST', '/emails/send', { body: payload, idempotencyKey });
+      const r = await client.request<OpenAPISendResponseBody>('POST', '/emails/send', { body: payload, idempotencyKey, signal: req.signal });
+      return r as unknown as SendEmailResponse;
     } catch (e: any) {
       lastErr = e;
       const status = e?.status as number | undefined;
@@ -71,4 +93,11 @@ export async function sendEmail(client: HttpClient, req: SendEmailRequest): Prom
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('send failed');
+}
+
+export async function sendEmailWithMeta(client: HttpClient, req: SendEmailRequest): Promise<{ data: SendEmailResponse; meta: { status: number; headers: Headers; requestId?: string } }> {
+  const { idempotencyKey } = req;
+  const payload = await buildBody(req);
+  const out = await client.requestWithMeta<OpenAPISendResponseBody>('POST', '/emails/send', { body: payload, idempotencyKey, signal: req.signal });
+  return { data: out.data as unknown as SendEmailResponse, meta: out.meta };
 }

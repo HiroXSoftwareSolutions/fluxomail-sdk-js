@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      FLUXOMAIL_OPENAPI: ${{ vars.FLUXOMAIL_OPENAPI }}
     strategy:
       matrix:
         node-version: [18.x, 20.x]
@@ -19,5 +21,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - name: OpenAPI codegen (optional)
+        if: ${{ env.FLUXOMAIL_OPENAPI != '' }}
+        run: npm run ci:codegen-check
       - run: npm test
       - run: npm pack --dry-run

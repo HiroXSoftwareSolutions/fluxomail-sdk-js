@@ -9,7 +9,8 @@ Tiny, robust SDK for Fluxomail’s REST + SSE APIs. Focused on minutes-to-first-
 - Typed errors and request IDs for supportability
 - Safe defaults: retries for idempotent reads, SSE auto-reconnect, no secrets in browser
 - Works in Node >= 18 and modern browsers
-- v1 API alignment; cc/bcc/attachments support; iterate/paging helper
+- v1 API alignment; cc/bcc/attachments support (incl. Blob/File in browser); iterate/paging helpers
+- Abortable requests via AbortSignal; REST token auto-refresh; SSE resume with Last-Event-ID (Node)
 
 ## Install
 
@@ -21,6 +22,7 @@ npm install @fluxomail/sdk
 
 ```ts
 import { Fluxomail } from '@fluxomail/sdk'
+import fs from 'node:fs/promises'
 
 const fm = new Fluxomail({
   apiKey: process.env.FLUXOMAIL_API_KEY, // Node only; do not expose in browser
@@ -71,6 +73,21 @@ sub.close()
 
 // Get a send’s timeline
 const t = await fm.timelines.get({ sendId: 'send_abc123' })
+
+// Iterate a send’s timeline (auto-paging)
+for await (const tev of fm.timelines.iterate({ sendId: 'send_abc123', limit: 100 })) {
+  console.log('timeline', tev)
+}
+
+// Abort a long-running request (example)
+const ac = new AbortController()
+const p = fm.events.list({ types: ['email.*'], limit: 1000, signal: ac.signal })
+ac.abort() // cancels the request
+
+// Typed subscribe (narrowed handler)
+fm.events.subscribe({ types: ['email.delivered', 'email.opened'] }, (evt) => {
+  // evt is EmailEventEnvelope<'email.delivered' | 'email.opened'>
+})
 ```
 
 ## CLI
@@ -91,6 +108,8 @@ bunx @fluxomail/sdk fluxomail --help
 fluxomail send --api-key $FLUXOMAIL_API_KEY --to user@example.com --subject "Hi" --text "Hello"
 fluxomail events list --api-key $FLUXOMAIL_API_KEY --types email.delivered --limit 50
 fluxomail events tail --api-key $FLUXOMAIL_API_KEY --types email.*
+fluxomail events backfill --api-key $FLUXOMAIL_API_KEY --types email.* --checkpoint-file .fluxomail.ckpt
+fluxomail timelines get --api-key $FLUXOMAIL_API_KEY --send-id send_abc123 --limit 100
 ```
 
 ## Configuration
@@ -100,6 +119,7 @@ new Fluxomail({
   baseUrl?: string // default: https://api.fluxomail.com/api/v1
   apiKey?: string, // server-side only
   token?: string,  // short-lived token for browser/Node
+  getToken?: () => Promise<string|undefined> // auto-refresh token on 401
   version?: string // API date header, default e.g. 2025-09-01
   timeoutMs?: number // default: 15_000
   fetch?: typeof fetch // custom fetch if needed
@@ -107,6 +127,7 @@ new Fluxomail({
   allowApiKeyInBrowser?: boolean // default false; throws if apiKey used in browser
   beforeRequest?: (ctx) => void | Promise<void> // hook for logging/metrics
   afterResponse?: (ctx) => void | Promise<void> // hook for logging/metrics
+  retry?: { maxAttempts?: number, retriableStatuses?: number[], baseDelayMs?: number, maxDelayMs?: number }
 })
 ```
 
@@ -135,11 +156,24 @@ try {
 
 - Create a server route to mint short-lived tokens scoped to the user/org.
 - In the browser, initialize with `token` only and call `events.subscribe()` which passes the token to the SSE endpoint as a query parameter.
+- Optional: pass `getToken` in the client config to auto-refresh REST requests after a 401.
+
+## Attachments in Browser
+
+- `attachments[].content` accepts `string`, `Uint8Array`, or `Blob | File`.
+- The SDK handles base64 conversion for you. Provide `contentType` for best results.
 
 ## Development
 
 - Build: `npm run build`
 - Test: `npm test`
+ - Test: `npm test`
+ - E2E smoke (requires staging env vars): `npm run smoke:e2e`
+
+## Examples
+
+- Node quickstart: `examples/node/quickstart.mjs`
+- Next.js browser token + SSE: `examples/next/`
 
 ## Support Matrix
 
@@ -158,3 +192,19 @@ We welcome contributions! Please see `CONTRIBUTING.md` for local setup, testing,
 
 This project follows the Contributor Covenant. By participating, you agree to uphold our `CODE_OF_CONDUCT.md`. For issues, email support@fluxomail.com.
 - Use `getToken` in `events.subscribe` for auto-refresh and `checkpoint` to resume after reloads.
+## Response Metadata
+
+- Use `listWithMeta`, `getWithMeta`, or `sendWithMeta` to access `requestId`, status, and headers.
+
+```ts
+const { data, meta } = await fm.events.listWithMeta({ limit: 1 })
+console.log(meta.requestId, meta.status)
+```
+
+## Retry Policy
+
+- Configure retry behavior for idempotent reads.
+
+```ts
+const fm = new Fluxomail({ apiKey, retry: { maxAttempts: 5, retriableStatuses: [408, 429], baseDelayMs: 200, maxDelayMs: 1500 } })
+```
