@@ -21,6 +21,10 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   publish:
     runs-on: ubuntu-latest
