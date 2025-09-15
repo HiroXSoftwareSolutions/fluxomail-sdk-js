@@ -34,7 +34,7 @@ jobs:
         run: npm ci
       - name: Generate OpenAPI types (optional)
         env:
-          FLUXOMAIL_OPENAPI: ${{ vars.FLUXOMAIL_OPENAPI }}
+          FLUXOMAIL_OPENAPI: ${{ secrets.FLUXOMAIL_OPENAPI }}
         run: npm run codegen:openapi
       - name: Run tests
         run: npm test
