@@ -23,5 +23,10 @@ Testing
 - E2E smoke script provided (run with staging env: FLUXOMAIL_BASE_URL + API key or token cmd).
 
 Release Notes
-- See CHANGELOG.md 0.3.0 entry.
-
+- OpenAPI adoption (phase 2) with compile-time checks; no public API breaks
+- AbortSignal, token auto-refresh, timelines iterator; SSE resume (Last-Event-ID)
+- Browser attachments (Blob/File)
+- Retry policy config; withMeta variants
+- CLI: events backfill (checkpoint), timelines get, output formatting, token-cmd
+- CI: optional codegen drift via FLUXOMAIL_OPENAPI; staging E2E workflow
+- Docs/examples updated (Next.js Pages/App, Workers)
