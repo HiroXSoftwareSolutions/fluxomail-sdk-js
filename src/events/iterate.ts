@@ -1,5 +1,6 @@
 import type { HttpClient } from '../core/http.js';
 import type { EventEnvelope, IterateEventsOptions, ListEventsResponse } from '../core/types.js';
+import type { OpenAPIListEventsResponse } from '../core/openapi.js';
 
 function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -11,7 +12,8 @@ export async function* iterateEvents<T = unknown>(client: HttpClient, opts: Iter
     if (pages >= maxPages) return;
     let page: ListEventsResponse<T> | null = null;
     try {
-      page = await client.request<ListEventsResponse<T>>('GET', '/events', { query: { types: opts.types, since: opts.since, cursor, limit: opts.limit }, signal: opts.signal });
+      const resp = await client.request<OpenAPIListEventsResponse>('GET', '/events', { query: { types: opts.types, since: opts.since, cursor, limit: opts.limit }, signal: opts.signal });
+      page = resp as unknown as ListEventsResponse<T>;
     } catch (e: any) {
       if (String(e?.code || '').toLowerCase() === 'rate_limited' && typeof e?.retryAfterMs === 'number') {
         await sleep(e.retryAfterMs);
