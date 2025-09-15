@@ -42,9 +42,11 @@ export function subscribe<T = unknown>(client: HttpClient, opts: SubscribeOption
       EventSourceImpl = (mod as unknown as { default?: typeof EventSource; EventSource?: typeof EventSource }).default
         ?? (mod as unknown as { EventSource?: typeof EventSource }).EventSource;
       if (!EventSourceImpl) throw new Error('EventSource polyfill not available');
+      const headers: Record<string, string> = { Accept: 'text/event-stream' };
+      if (latestSince) headers['Last-Event-ID'] = latestSince;
       es = new (EventSourceImpl as any)(url.toString(), {
         // @ts-expect-error NodeEventSource supports headers, but TS may not recognize on EventSource type
-        headers: { Accept: 'text/event-stream' },
+        headers,
       }) as unknown as EventSource;
     /* c8 ignore start */
     } else {

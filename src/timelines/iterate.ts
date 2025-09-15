@@ -1,19 +1,19 @@
 import type { HttpClient } from '../core/http.js';
-import type { EventEnvelope, IterateEventsOptions, ListEventsResponse } from '../core/types.js';
-import type { OpenAPIListEventsResponse } from '../core/openapi.js';
+import type { EventEnvelope, GetTimelineResponse, IterateTimelineOptions } from '../core/types.js';
+import type { OpenAPITimelineResponse } from '../core/openapi.js';
 
 function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
 
-export async function* iterateEvents<T = unknown>(client: HttpClient, opts: IterateEventsOptions = {}): AsyncGenerator<EventEnvelope<T>, void, void> {
+export async function* iterateTimeline<T = unknown>(client: HttpClient, opts: IterateTimelineOptions): AsyncGenerator<EventEnvelope<T>, void, void> {
   let cursor = opts.cursor;
   let pages = 0;
   const maxPages = opts.maxPages ?? Infinity;
   for (;;) {
     if (pages >= maxPages) return;
-    let page: ListEventsResponse<T> | null = null;
+    let page: GetTimelineResponse<T> | null = null;
     try {
-      const resp = await client.request<OpenAPIListEventsResponse>('GET', '/events', { query: { types: opts.types, since: opts.since, cursor, limit: opts.limit }, signal: opts.signal });
-      page = resp as unknown as ListEventsResponse<T>;
+      const resp = await client.request<OpenAPITimelineResponse>('GET', `/sends/${encodeURIComponent(opts.sendId)}`, { query: { cursor, limit: opts.limit }, signal: opts.signal });
+      page = resp as unknown as GetTimelineResponse<T>;
     } catch (e: any) {
       if (String(e?.code || '').toLowerCase() === 'rate_limited' && typeof e?.retryAfterMs === 'number') {
         await sleep(e.retryAfterMs);
@@ -23,7 +23,7 @@ export async function* iterateEvents<T = unknown>(client: HttpClient, opts: Iter
     }
     pages++;
     for (const ev of page.events) {
-      yield ev;
+      yield ev as EventEnvelope<T>;
       if (opts.signal?.aborted) return;
     }
     if (!page.nextCursor) return;

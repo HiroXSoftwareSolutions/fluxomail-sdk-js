@@ -1,5 +1,6 @@
 import type { HttpClient } from '../core/http.js';
 import type { ListEventsOptions, ListEventsResponse } from '../core/types.js';
+import { asOpenAPIListEvents, type OpenAPIListEventsResponse } from '../core/openapi.js';
 
 export async function listEvents<T = unknown>(client: HttpClient, opts: ListEventsOptions = {}): Promise<ListEventsResponse<T>> {
   const query = {
@@ -8,5 +9,19 @@ export async function listEvents<T = unknown>(client: HttpClient, opts: ListEven
     since: opts.since,
     types: opts.types,
   };
-  return client.request('GET', '/events', { query });
+  const resp = await client.request<OpenAPIListEventsResponse>('GET', '/events', { query, signal: opts.signal });
+  // Map OpenAPI response to public SDK shape (structurally identical)
+  const mapped = asOpenAPIListEvents(resp);
+  return mapped as unknown as ListEventsResponse<T>;
+}
+
+export async function listEventsWithMeta<T = unknown>(client: HttpClient, opts: ListEventsOptions = {}) {
+  const query = {
+    cursor: opts.cursor,
+    limit: opts.limit,
+    since: opts.since,
+    types: opts.types,
+  };
+  const out = await client.requestWithMeta<OpenAPIListEventsResponse>('GET', '/events', { query, signal: opts.signal });
+  return { data: asOpenAPIListEvents(out.data) as unknown as ListEventsResponse<T>, meta: out.meta };
 }

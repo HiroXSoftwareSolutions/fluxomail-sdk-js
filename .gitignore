@@ -19,8 +19,10 @@ PLANS.md
 plans.md
 notes.local.md
 TODO.md
+ROADMAP_PRIVATE.md
 examples/**/.env.local
 coverage/
+Fluxomail SDK Technical and Content Audit.pdf
 
 # npm pack tarballs
 *.tgz

@@ -4,6 +4,7 @@ export interface ClientConfig {
   baseUrl?: string;
   apiKey?: string; // server-side only
   token?: string; // short-lived token
+  getToken?: () => string | undefined | Promise<string | undefined>; // token refresher for REST
   version?: string; // API date header
   timeoutMs?: number;
   fetch?: typeof fetch;
@@ -11,6 +12,7 @@ export interface ClientConfig {
   allowApiKeyInBrowser?: boolean; // default false
   beforeRequest?: (ctx: { method: string; url: string; headers: Headers; body?: Json }) => void | Promise<void>;
   afterResponse?: (ctx: { method: string; url: string; status: number; headers: Headers; requestId?: string }) => void | Promise<void>;
+  retry?: RetryPolicy;
 }
 
 export interface AuthConfig {
@@ -30,11 +32,12 @@ export interface ListEventsOptions {
   cursor?: string;
   limit?: number;
   since?: string; // ISO timestamp or event id, depending on API contract
+  signal?: AbortSignal;
 }
 
 export interface ListEventsResponse<T = unknown> {
   events: EventEnvelope<T>[];
-  nextCursor?: string;
+  nextCursor?: string | null;
 }
 
 export interface SubscribeOptions {
@@ -76,22 +79,34 @@ export interface SendEmailRequest {
   headers?: Record<string, string>;
   idempotencyKey?: string;
   idempotentRetry?: number; // max attempts if idempotencyKey present (>=1)
+  signal?: AbortSignal;
+  // templates & personalization (if supported by backend)
+  templateId?: string;
+  variables?: Record<string, Json>;
+  personalizations?: Array<{
+    to: string | string[];
+    cc?: string | string[];
+    bcc?: string | string[];
+    variables?: Record<string, Json>;
+  }>;
 }
 
 export interface SendEmailResponse {
   sendId: string;
   accepted?: boolean;
+  status?: string;
 }
 
 export interface GetTimelineOptions {
   sendId: string;
   cursor?: string;
   limit?: number;
+  signal?: AbortSignal;
 }
 
 export interface GetTimelineResponse<T = unknown> {
   events: EventEnvelope<T>[];
-  nextCursor?: string;
+  nextCursor?: string | null;
 }
 
 export interface IterateEventsOptions extends ListEventsOptions {
@@ -99,10 +114,44 @@ export interface IterateEventsOptions extends ListEventsOptions {
   maxPages?: number;
 }
 
+export interface IterateTimelineOptions extends GetTimelineOptions {
+  maxPages?: number;
+}
+
+export interface RetryPolicy {
+  maxAttempts?: number; // default 3 for idempotent reads
+  retriableStatuses?: number[]; // default: 408, 429, 500-599
+  baseDelayMs?: number; // default 250ms
+  maxDelayMs?: number; // default 2000ms
+}
+
+// Typed event data (basic discriminated unions)
+export interface EmailSentEventData extends EmailEventDataBase {}
+export interface EmailDeliveredEventData extends EmailEventDataBase {}
+export interface EmailOpenedEventData extends EmailEventDataBase { ip?: string; userAgent?: string }
+export interface EmailClickedEventData extends EmailEventDataBase { url?: string; ip?: string; userAgent?: string }
+export interface EmailBouncedEventData extends EmailEventDataBase { reason?: string; subtype?: string }
+export interface EmailComplainedEventData extends EmailEventDataBase { providerReason?: string }
+export interface EmailFailedEventData extends EmailEventDataBase { reason?: string }
+export interface EmailDroppedEventData extends EmailEventDataBase { reason?: string }
+
+export type EventDataByType<K extends EmailEventType> =
+  K extends 'email.sent' ? EmailSentEventData :
+  K extends 'email.delivered' ? EmailDeliveredEventData :
+  K extends 'email.opened' ? EmailOpenedEventData :
+  K extends 'email.clicked' ? EmailClickedEventData :
+  K extends 'email.bounced' ? EmailBouncedEventData :
+  K extends 'email.complained' ? EmailComplainedEventData :
+  K extends 'email.failed' ? EmailFailedEventData :
+  K extends 'email.dropped' ? EmailDroppedEventData :
+  EmailEventDataBase;
+
+export type EventHandlerByType<K extends EmailEventType> = (evt: EmailEventEnvelope<K>) => void;
+
 // Attachments
 export interface Attachment {
   filename: string;
-  content: string | Uint8Array; // raw or base64 string
+  content: string | Uint8Array | Blob; // raw or base64 string, or Blob/File in browsers
   contentType?: string;
 }
 
@@ -124,7 +173,6 @@ export interface EmailEventDataBase {
   [k: string]: unknown;
 }
 
-export type EventDataByType<K extends EmailEventType> = EmailEventDataBase;
 
 export type EmailEventEnvelope<K extends EmailEventType = EmailEventType> = Omit<EventEnvelope, 'type' | 'data'> & {
   type: K;
@@ -143,3 +191,10 @@ export function isEmailEventType(type: string): type is EmailEventType {
     type === 'email.dropped'
   );
 }
+
+export interface IterateEventsOptions extends ListEventsOptions {
+  signal?: AbortSignal;
+  maxPages?: number;
+}
+
+// (removed duplicate declarations introduced during merge)
