@@ -19,8 +19,21 @@ jobs:
           node-version: 20.x
           cache: npm
           registry-url: 'https://registry.npmjs.org'
-      - run: npm ci
-      - run: npm test
-      - run: npm pack --dry-run
-      - name: Publish to npm with provenance (OIDC)
+      - name: Install deps
+        run: npm ci
+      - name: Generate OpenAPI types (optional)
+        env:
+          FLUXOMAIL_OPENAPI: ${{ vars.FLUXOMAIL_OPENAPI }}
+        run: npm run codegen:openapi
+      - name: Run tests
+        run: npm test
+      - name: Verify package contents
+        run: npm run ci:pack-check
+      - name: Who am I (npm)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami || true
+      - name: Publish to npm with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
