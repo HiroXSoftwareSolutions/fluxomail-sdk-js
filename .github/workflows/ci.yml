@@ -26,9 +26,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci --prefer-offline --no-audit
-      - name: OpenAPI codegen (optional)
-        if: ${{ env.FLUXOMAIL_OPENAPI != '' }}
+      - name: OpenAPI codegen (main only)
+        if: ${{ env.FLUXOMAIL_OPENAPI != '' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         run: npm run ci:codegen-check
       - run: npm test
       - run: npm run ci:pack-check
-
