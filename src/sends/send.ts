@@ -76,7 +76,7 @@ export async function sendEmail(client: HttpClient, req: SendEmailRequest): Prom
   for (let i = 0; i < attempts; i++) {
     try {
       // Public API path: POST /api/v1/emails/send
-      const r = await client.request<OpenAPISendResponseBody>('POST', '/emails/send', { body: payload, idempotencyKey, signal: req.signal });
+      const r = await client.request<OpenAPISendResponseBody>('POST', '/emails/send', { body: payload, idempotencyKey, signal: req.signal, timeoutMs: req.timeoutMs });
       return r as unknown as SendEmailResponse;
     } catch (e: any) {
       lastErr = e;
@@ -98,6 +98,6 @@ export async function sendEmail(client: HttpClient, req: SendEmailRequest): Prom
 export async function sendEmailWithMeta(client: HttpClient, req: SendEmailRequest): Promise<{ data: SendEmailResponse; meta: { status: number; headers: Headers; requestId?: string } }> {
   const { idempotencyKey } = req;
   const payload = await buildBody(req);
-  const out = await client.requestWithMeta<OpenAPISendResponseBody>('POST', '/emails/send', { body: payload, idempotencyKey, signal: req.signal });
+  const out = await client.requestWithMeta<OpenAPISendResponseBody>('POST', '/emails/send', { body: payload, idempotencyKey, signal: req.signal, timeoutMs: req.timeoutMs });
   return { data: out.data as unknown as SendEmailResponse, meta: out.meta };
 }

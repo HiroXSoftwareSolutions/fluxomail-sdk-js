@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { startTestServer } from './helpers/server.mjs';
 
-test('CLI events tail streams SSE and exits on SIGINT', async () => {
+test('CLI events tail streams SSE and exits on SIGINT', { timeout: 10000 }, async () => {
   const server = await startTestServer({
     'SSE /events/stream': (req, res, url) => {
       res.writeHead(200, {
@@ -39,4 +39,3 @@ test('CLI events tail streams SSE and exits on SIGINT', async () => {
     await server.close();
   }
 });
-

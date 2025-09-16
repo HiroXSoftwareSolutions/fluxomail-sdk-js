@@ -12,23 +12,21 @@ async function main() {
     const mod = await import('openapi-typescript')
     openapiTS = mod && (mod.default || mod)
   } catch {}
-  const envSpec = (process.env.FLUXOMAIL_OPENAPI || '').trim()
-  const isHttp = (s) => s.startsWith('http://') || s.startsWith('https://')
-  const fileExists = async (p) => { try { await stat(p); return true } catch { return false } }
-
-  if (openapiTS && envSpec && (isHttp(envSpec) || await fileExists(envSpec))) {
+  const envSpec = process.env.FLUXOMAIL_OPENAPI
+  const fallbackSpec = path.join(root, '..', 'email-service', 'openapi', '2025-09-01.yaml')
+  let spec = envSpec && envSpec.trim() ? envSpec.trim() : ''
+  if (!spec) {
+    try { await stat(fallbackSpec); spec = fallbackSpec } catch {}
+  }
+  if (openapiTS && spec) {
     try {
-      const types = await openapiTS(envSpec)
+      const types = await openapiTS(spec, { httpHeaders: true })
       await writeFile(outFile, String(types))
       console.log('Generated types to', outFile)
       return
     } catch (e) {
       console.error('OpenAPI codegen failed:', e && e.message ? e.message : String(e))
     }
-  } else if (envSpec) {
-    console.warn('FLUXOMAIL_OPENAPI is set but not a valid file/URL; writing stub types')
-  } else {
-    console.log('FLUXOMAIL_OPENAPI not provided; writing stub types')
   }
 
   const stub = `// Auto-generated stub (no OpenAPI spec available)\n` +

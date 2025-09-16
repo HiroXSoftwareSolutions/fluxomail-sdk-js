@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Fluxomail CLI: send, events list, events tail (SSE)
 import process from 'node:process';
-import { readFile, writeFile, appendFile } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, mkdir } from 'node:fs/promises';
 import { exec } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 
 async function loadSdk() {
   const url = new URL('../dist/index.js', import.meta.url).href;
@@ -37,6 +38,10 @@ Commands:
   events tail     Stream events (SSE)
   events backfill Backfill events and persist checkpoint
   timelines get   Get a send's timeline
+  whoami          Validate auth and show account info (basic)
+  init next       Scaffold Next.js token route example
+  init worker     Scaffold minimal Cloudflare Worker example
+  init next-app   Scaffold Next.js App Router token route
 
 Global options:
   --api-key <key>           API key (or env FLUXOMAIL_API_KEY)
@@ -44,6 +49,7 @@ Global options:
   --version <date>          API version header (default 2025-09-01)
   --token-cmd <cmd>         Shell command that prints a short-lived token
   --quiet                   Suppress non-essential output
+  --config <path>           Path to .fluxomailrc JSON (defaults: cwd then home)
 
 Send options:
   --to <email>[,email]      Recipient(s)
@@ -55,6 +61,7 @@ Send options:
   --cc <email[,email]>
   --bcc <email[,email]>
   --attach <path[:mime][:name]>   (repeat to add multiple)
+  --header <k:v>            Add custom message header (repeat)
 
 Events list options:
   --types <csv>             e.g., email.delivered,email.opened or email.*
@@ -77,6 +84,7 @@ Events backfill options:
   --checkpoint-file <path>  file to persist last event id
   --format <json|jsonl>
   --output <file>
+  --max-pages <n>
 
 Timelines get options:
   --send-id <id>            required
@@ -104,12 +112,21 @@ async function main() {
   const cmd = args._[0];
   const sub = args._[1];
 
-  const apiKey = args['api-key'] || process.env.FLUXOMAIL_API_KEY || '';
-  const baseUrl = args.base || process.env.FLUXOMAIL_BASE_URL || undefined;
-  const version = args.version || '2025-09-01';
+  // Load config
+  let cfg = {};
+  const cfgPath = args.config ? String(args.config) : undefined;
+  const cwdRc = path.join(process.cwd(), '.fluxomailrc');
+  const homeRc = path.join(os.homedir(), '.fluxomailrc');
+  const tryLoad = async (p) => { try { const t = await readFile(p, 'utf8'); return JSON.parse(t) } catch { return {} } };
+  if (cfgPath) cfg = await tryLoad(cfgPath);
+  else cfg = { ...(await tryLoad(cwdRc)), ...(await tryLoad(homeRc)) };
+
+  const apiKey = args['api-key'] || process.env.FLUXOMAIL_API_KEY || cfg.apiKey || '';
+  const baseUrl = args.base || process.env.FLUXOMAIL_BASE_URL || cfg.base || undefined;
+  const version = args.version || cfg.version || '2025-09-01';
 
   const { Fluxomail } = await loadSdk();
-  const tokenCmd = args['token-cmd'] ? String(args['token-cmd']) : undefined;
+  const tokenCmd = args['token-cmd'] ? String(args['token-cmd']) : (cfg['tokenCmd'] ? String(cfg['tokenCmd']) : undefined);
   let initialToken = undefined;
   if (!apiKey && tokenCmd) {
     try { initialToken = await runTokenCmd(tokenCmd); } catch {}
@@ -140,7 +157,15 @@ async function main() {
       const buf = await readFile(p);
       attachments.push({ filename: name, content: new Uint8Array(buf), ...(mime ? { contentType: mime } : {}) });
     }
-    const res = await fm.sends.send({ to: toList, from: args.from, subject, text, html, cc, bcc, attachments: attachments.length ? attachments : undefined, idempotencyKey: idemp });
+    // headers parsing
+    const hdrs = args.header ? (Array.isArray(args.header) ? args.header : [args.header]) : [];
+    const headers = {};
+    for (const h of hdrs) {
+      const s = String(h);
+      const i = s.indexOf(':');
+      if (i > 0) headers[s.slice(0, i).trim()] = s.slice(i + 1).trim();
+    }
+    const res = await fm.sends.send({ to: toList, from: args.from, subject, text, html, cc, bcc, headers: Object.keys(headers).length ? headers : undefined, attachments: attachments.length ? attachments : undefined, idempotencyKey: idemp });
     console.log(JSON.stringify(res, null, 2));
     return;
   }
@@ -196,7 +221,8 @@ async function main() {
     const format = (args.format ? String(args.format) : 'jsonl').toLowerCase();
     const outPath = args.output ? String(args.output) : undefined;
     let lastId = since;
-    for await (const evt of fm.events.iterate({ types, limit, since, signal: abort.signal })) {
+    const maxPages = args['max-pages'] ? Number(args['max-pages']) : undefined;
+    for await (const evt of fm.events.iterate({ types, limit, since, signal: abort.signal, maxPages })) {
       lastId = evt.id;
       const line = format === 'json' ? JSON.stringify({ events: [evt] }) : JSON.stringify(evt);
       if (!args.quiet) console.log(line);
@@ -204,6 +230,49 @@ async function main() {
       if (ckptFile && lastId) { try { await writeFile(ckptFile, lastId, 'utf8'); } catch {} }
     }
     return;
+  }
+
+  if (cmd === 'whoami') {
+    if (!apiKey && !tokenCmd && !initialToken) { console.error('Missing auth: provide --api-key or --token-cmd'); process.exit(2); }
+    try {
+      const res = await fm.events.list({ limit: 0 });
+      if (!args.quiet) console.log(JSON.stringify({ ok: true, events: res.events.length }, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error(e?.message || String(e));
+      process.exit(1);
+    }
+  }
+
+  if (cmd === 'init' && sub === 'next') {
+    const target = args._[2] ? String(args._[2]) : 'examples/next'
+    const tmpl = `// Minimal Next.js API route example for Fluxomail token\nimport type { NextApiRequest, NextApiResponse } from 'next'\nexport default async function handler(req: NextApiRequest, res: NextApiResponse) {\n  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })\n  // TODO: Replace with real server-side token minting\n  return res.status(200).json({ token: 'replace-with-real-short-lived-token' })\n}\n`
+    const file = path.join(target, 'pages', 'api', 'fluxomail', 'token.ts')
+    await mkdir(path.dirname(file), { recursive: true }).catch(() => {})
+    await writeFile(file, tmpl, { flag: 'wx' }).catch(() => {})
+    if (!args.quiet) console.log('Wrote example to', file)
+    return
+  }
+
+  if (cmd === 'init' && sub === 'worker') {
+    const target = args._[2] ? String(args._[2]) : 'examples/workers'
+    const file = path.join(target, 'worker.js')
+    const srcUrl = new URL('../examples/workers/worker.js', import.meta.url)
+    const src = await readFile(srcUrl).catch(() => null)
+    await mkdir(path.dirname(file), { recursive: true }).catch(() => {})
+    if (src) await writeFile(file, src, { flag: 'wx' }).catch(() => {})
+    if (!args.quiet) console.log('Wrote worker example to', file)
+    return
+  }
+
+  if (cmd === 'init' && sub === 'next-app') {
+    const target = args._[2] ? String(args._[2]) : 'examples/next'
+    const tmpl = `// Next.js App Router route handler for Fluxomail token\nexport const runtime = 'nodejs'\nexport async function POST(request: Request) {\n  // TODO: Replace with real server-side token minting\n  return Response.json({ token: 'replace-with-real-short-lived-token' })\n}\n`
+    const file = path.join(target, 'app', 'api', 'fluxomail', 'token', 'route.ts')
+    await mkdir(path.dirname(file), { recursive: true }).catch(() => {})
+    await writeFile(file, tmpl, { flag: 'wx' }).catch(() => {})
+    if (!args.quiet) console.log('Wrote example to', file)
+    return
   }
 
   if (cmd === 'timelines' && sub === 'get') {

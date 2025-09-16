@@ -12,7 +12,7 @@ export async function* iterateEvents<T = unknown>(client: HttpClient, opts: Iter
     if (pages >= maxPages) return;
     let page: ListEventsResponse<T> | null = null;
     try {
-      const resp = await client.request<OpenAPIListEventsResponse>('GET', '/events', { query: { types: opts.types, since: opts.since, cursor, limit: opts.limit }, signal: opts.signal });
+      const resp = await client.request<OpenAPIListEventsResponse>('GET', '/events', { query: { types: opts.types, since: opts.since, cursor, limit: opts.limit }, signal: opts.signal, timeoutMs: opts.timeoutMs, retry: opts.retry });
       page = resp as unknown as ListEventsResponse<T>;
     } catch (e: any) {
       if (String(e?.code || '').toLowerCase() === 'rate_limited' && typeof e?.retryAfterMs === 'number') {

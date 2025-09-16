@@ -33,6 +33,8 @@ export interface ListEventsOptions {
   limit?: number;
   since?: string; // ISO timestamp or event id, depending on API contract
   signal?: AbortSignal;
+  timeoutMs?: number;
+  retry?: RetryPolicy;
 }
 
 export interface ListEventsResponse<T = unknown> {
@@ -48,6 +50,13 @@ export interface SubscribeOptions {
   checkpoint?: {
     get: () => string | undefined | Promise<string | undefined>;
     set: (id: string) => void | Promise<void>;
+  };
+  onOpen?: () => void;
+  onError?: (error?: unknown) => void;
+  onReconnect?: (attempt: number, delayMs: number) => void;
+  backoff?: {
+    baseDelayMs?: number;
+    maxDelayMs?: number;
   };
 }
 
@@ -80,6 +89,7 @@ export interface SendEmailRequest {
   idempotencyKey?: string;
   idempotentRetry?: number; // max attempts if idempotencyKey present (>=1)
   signal?: AbortSignal;
+  timeoutMs?: number;
   // templates & personalization (if supported by backend)
   templateId?: string;
   variables?: Record<string, Json>;
@@ -102,6 +112,8 @@ export interface GetTimelineOptions {
   cursor?: string;
   limit?: number;
   signal?: AbortSignal;
+  timeoutMs?: number;
+  retry?: RetryPolicy;
 }
 
 export interface GetTimelineResponse<T = unknown> {
@@ -123,6 +135,56 @@ export interface RetryPolicy {
   retriableStatuses?: number[]; // default: 408, 429, 500-599
   baseDelayMs?: number; // default 250ms
   maxDelayMs?: number; // default 2000ms
+}
+
+// Templates
+export interface Template {
+  id: string;
+  name?: string;
+  subject?: string;
+  htmlContent?: string;
+  content?: string;
+  created?: string;
+  updated?: string;
+  [k: string]: unknown;
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  subject?: string;
+  htmlContent?: string;
+  content?: string;
+}
+
+export interface UpdateTemplateRequest {
+  name?: string;
+  subject?: string;
+  htmlContent?: string;
+  content?: string;
+}
+
+export interface RenderTemplateRequest {
+  variables?: Record<string, Json>;
+}
+
+export interface RenderTemplateResponse {
+  subject?: string;
+  html?: string;
+  content?: string;
+  [k: string]: unknown;
+}
+
+export interface ListTemplatesOptions {
+  cursor?: string;
+  limit?: number;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  retry?: RetryPolicy;
+}
+
+export interface ListTemplatesResponse {
+  templates: Template[];
+  nextCursor?: string | null;
 }
 
 // Typed event data (basic discriminated unions)
@@ -191,10 +253,3 @@ export function isEmailEventType(type: string): type is EmailEventType {
     type === 'email.dropped'
   );
 }
-
-export interface IterateEventsOptions extends ListEventsOptions {
-  signal?: AbortSignal;
-  maxPages?: number;
-}
-
-// (removed duplicate declarations introduced during merge)

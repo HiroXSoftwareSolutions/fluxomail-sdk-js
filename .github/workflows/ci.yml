@@ -6,11 +6,16 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
-      FLUXOMAIL_OPENAPI: ${{ secrets.FLUXOMAIL_OPENAPI }}
+      FLUXOMAIL_OPENAPI: ${{ vars.FLUXOMAIL_OPENAPI }}
     strategy:
       matrix:
         node-version: [18.x, 20.x]
@@ -20,10 +25,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
-      - run: npm ci
-      - name: OpenAPI codegen drift (warn only on main)
+      - run: npm ci --prefer-offline --no-audit
+      - name: OpenAPI codegen (main only)
         if: ${{ env.FLUXOMAIL_OPENAPI != '' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        continue-on-error: true
         run: npm run ci:codegen-check
       - run: npm test
       - run: npm run ci:pack-check
