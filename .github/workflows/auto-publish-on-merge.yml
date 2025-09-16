@@ -132,11 +132,46 @@ jobs:
         run: npm publish --provenance --access public
 
       - name: Push commit and tags
+        id: push
         run: |
-          set -euo pipefail
-          # Push tag; commit push may be blocked by branch protection and is non-fatal
+          set -e
+          # Always push tags first (safe + idempotent)
           git push origin --tags || true
-          git push origin HEAD:main --follow-tags || true
+          # Try pushing the bump commit to main; record exit code for PR fallback
+          set +e
+          git push origin HEAD:main --follow-tags
+          ec=$?
+          set -e
+          echo "push_status=$ec" >> "$GITHUB_OUTPUT"
+
+      - name: Create bump PR if main push blocked
+        if: steps.push.outputs.push_status != '0'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const version = process.env.VERSION
+            const head = `release/bump-v${version}`
+            const base = 'main'
+
+            // Create remote branch from current HEAD
+            await exec.exec('git', ['push', 'origin', `HEAD:refs/heads/${head}`, '--force'])
+
+            // If PR already open, do nothing
+            const existing = await github.rest.pulls.list({ owner, repo, head: `${owner}:${head}`, state: 'open' })
+            if (existing.data?.length) {
+              core.info(`Bump PR already exists: ${existing.data[0].html_url}`)
+              return
+            }
+
+            const title = `chore(main): release ${version} [release-bump]`
+            const body = 'Automated bump commit could not be pushed to protected branch. This PR carries the version bump so main stays in sync with npm.'
+            const pr = await github.rest.pulls.create({ owner, repo, title, head, base, body })
+            core.info(`Opened bump PR: ${pr.data.html_url}`)
+        env:
+          VERSION: ${{ steps.bumpver.outputs.version }}
+        continue-on-error: true
 
       - name: Summary
         run: |
