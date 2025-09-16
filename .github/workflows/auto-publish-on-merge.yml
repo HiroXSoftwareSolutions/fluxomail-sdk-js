@@ -31,6 +31,9 @@ jobs:
           cache: npm
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Install jq (used for version existence check)
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Determine bump type from PR labels/title (default patch)
         id: bump
         env:
@@ -78,16 +81,24 @@ jobs:
         run: npm run ci:pack-check
 
       - name: Bump version and create tag
+        id: bumpver
         env:
           BUMP: ${{ steps.bump.outputs.bump }}
         run: |
           set -euo pipefail
-          npm version "$BUMP" -m "chore(main): release %s [release-bump]"
-
-      - name: Compute new version
-        id: ver
-        run: |
-          node -e "console.log('version=' + require('./package.json').version)" >> "$GITHUB_OUTPUT"
+          # Initial bump without creating a tag; commit may be blocked by protection later.
+          npm version "$BUMP" --no-git-tag-version
+          V=$(node -p "require('./package.json').version")
+          # If tag already exists (e.g., from a previous attempt), keep bumping patch until free
+          while git rev-parse -q --verify "refs/tags/v$V" >/dev/null; do
+            echo "Tag v$V exists; bumping patch to avoid collision"
+            npm version patch --no-git-tag-version
+            V=$(node -p "require('./package.json').version")
+          done
+          git add -A
+          git commit -m "chore(main): release $V [release-bump]" || true
+          git tag -a "v$V" -m "Release v$V" || true
+          echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Preflight: NPM token present
         run: |
@@ -105,7 +116,7 @@ jobs:
         id: exists
         run: |
           set -euo pipefail
-          V="${{ steps.ver.outputs.version }}"
+          V="${{ steps.bumpver.outputs.version }}"
           echo "Checking npm for version $V"
           if npm view @fluxomail/sdk versions --json | jq -e ". | index(\"$V\")" >/dev/null; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -129,4 +140,4 @@ jobs:
 
       - name: Summary
         run: |
-          echo "Auto-release bump completed. If commit push was blocked by branch protection, the tag was still pushed and publish executed in this job."
+          echo "Auto-release bump completed. Version ${{ steps.bumpver.outputs.version }}. If commit push was blocked by branch protection, the tag was still pushed and publish executed in this job."
