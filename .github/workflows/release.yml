@@ -17,15 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  noop-guard:
-    if: ${{ github.event_name != 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Skipped: manual-only workflow"
-
   publish:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    # Only run on tag push, published release, or manual dispatch
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
@@ -35,7 +27,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref != '' && inputs.ref || (github.event_name == 'release' && github.event.release.tag_name || github.ref) }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 20.x
@@ -54,7 +46,7 @@ jobs:
         run: npm test
       - name: Verify package contents
         run: npm run ci:pack-check
-      - name: Preflight: NPM token present
+      - name: "Preflight: NPM token present"
         run: |
           if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
             echo "NPM_TOKEN secret is not configured for environment 'npm-publish'."
@@ -81,10 +73,10 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish to npm with provenance
-        if: steps.exists.outputs.exists == 'false' && inputs.dry_run != 'true'
+        if: ${{ steps.exists.outputs.exists == 'false' && inputs.dry_run != 'true' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
       - name: Dry-run skip note
-        if: inputs.dry_run == 'true'
+        if: ${{ inputs.dry_run == 'true' }}
         run: echo "Dry run enabled; skipping npm publish."

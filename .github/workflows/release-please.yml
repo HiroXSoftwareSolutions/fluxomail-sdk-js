@@ -9,14 +9,7 @@ on:
         default: ''
 
 jobs:
-  noop-guard:
-    if: ${{ github.event_name != 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Skipped: manual-only workflow"
-
   release-please:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

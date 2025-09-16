@@ -44,21 +44,25 @@ OpenAPI Types
 
 Releases
 --------
-We support two clean paths to publish to npm with provenance:
+We support three clean paths to publish to npm with provenance:
 
-1) Tag‑driven (recommended)
+1) Auto-publish (default)
+   - Bump `package.json.version` in the PR you plan to merge.
+   - When the PR merges to `main`, `.github/workflows/auto-publish-on-merge.yml` runs build/tests/pack and publishes the new version with provenance. It also tags `vX.Y.Z` if missing. If the version already exists on npm the job exits early.
+
+2) Tag-driven (manual)
    - Merge to `main`.
    - Set `package.json` to the release version.
    - Tag `vX.Y.Z` and push: `npm run release:tag && npm run release:tag:push`.
    - Workflow `.github/workflows/release.yml` runs tests and publishes with `NPM_TOKEN` (environment: `npm-publish`).
 
-2) Branch‑named release (fast path)
+3) Branch-named release (fast path)
    - Create a branch named exactly the version (with or without leading `v`), e.g. `0.7.0` or `v1.0.6`.
    - Ensure `package.json.version` matches the branch name (without the `v`).
    - Push the branch. Workflow `.github/workflows/release-from-branch.yml` will create tag `vX.Y.Z` for you and push it. The tag triggers the normal publish workflow.
 
 Notes:
-- `NPM_TOKEN` must be an npm “Automation” token and is stored as an Environment secret on the `npm-publish` environment.
+- All paths require `NPM_TOKEN` as an npm “Automation” token on the `npm-publish` environment.
 - If environment approvals are required, approve the job in the Actions UI.
 - Publishing is idempotent; if the version already exists on npm, the workflow skips publish.
 
