@@ -17,9 +17,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  noop-guard:
+    if: ${{ github.event_name != 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Skipped: manual-only workflow"
+
   publish:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     # Only run on tag push, published release, or manual dispatch
-    if: ${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') || inputs.ref != '' }}
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
