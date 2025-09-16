@@ -34,16 +34,26 @@ jobs:
           node-version: 20.x
           cache: npm
           registry-url: 'https://registry.npmjs.org'
+      - name: Install jq (used for version existence check)
+        run: sudo apt-get update && sudo apt-get install -y jq
       - name: Install deps
         run: npm ci
       - name: Generate OpenAPI types (optional)
         env:
           FLUXOMAIL_OPENAPI: ${{ vars.FLUXOMAIL_OPENAPI }}
+        if: ${{ env.FLUXOMAIL_OPENAPI != '' }}
         run: npm run codegen:openapi
       - name: Run tests
         run: npm test
       - name: Verify package contents
         run: npm run ci:pack-check
+      - name: Preflight: NPM token present
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "NPM_TOKEN secret is not configured for environment 'npm-publish'."
+            echo "Create an npm automation token and add it as an environment secret to proceed."
+            exit 1
+          fi
       - name: Who am I (npm)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
