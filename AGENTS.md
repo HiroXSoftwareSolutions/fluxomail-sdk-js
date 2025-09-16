@@ -107,3 +107,5 @@ When touching CI/Release
 - Keep PR fast: don’t add heavy steps to PR workflows.
 - Keep OpenAPI drift check only on main to avoid PR noise.
 - Avoid blocking PRs on CodeQL; let it run on main and on a schedule.
+
+Auto‑publish: Merges to main now bump + tag + publish inline to npm.
