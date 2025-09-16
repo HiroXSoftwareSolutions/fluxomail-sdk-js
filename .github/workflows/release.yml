@@ -12,6 +12,10 @@ on:
         description: 'Git ref to publish (e.g., refs/tags/v0.3.3)'
         required: false
         default: ''
+      dry_run:
+        description: 'Skip npm publish (dry run)'
+        required: false
+        default: 'false'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -74,7 +78,10 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish to npm with provenance
-        if: steps.exists.outputs.exists == 'false'
+        if: steps.exists.outputs.exists == 'false' && inputs.dry_run != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
+      - name: Dry-run skip note
+        if: inputs.dry_run == 'true'
+        run: echo "Dry run enabled; skipping npm publish."

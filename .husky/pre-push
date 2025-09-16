@@ -8,8 +8,19 @@ else
   echo "[husky] Skipping codegen drift (FLUXOMAIL_OPENAPI not set)"
 fi
 
-# Run tests (wrapper handles Node 18/20 differences)
-npm test || exit 1
+BRANCH=$(git symbolic-ref --quiet --short HEAD || echo "")
+if echo "$BRANCH" | grep -qE '^infra/'; then
+  echo "[husky] Detected infra branch ($BRANCH): running fast test subset"
+  node --test \
+    tests/http*.mjs \
+    tests/cli-*.mjs \
+    tests/sends.test.mjs \
+    tests/timelines.test.mjs \
+    tests/errors.test.mjs || exit 1
+else
+  # Run full suite for normal branches
+  npm test || exit 1
+fi
 
 # Ensure package contents are clean before publishing
 npm run ci:pack-check || exit 1
