@@ -5,8 +5,13 @@ echo "[husky] Pre-commit: build + fast tests"
 # Explicit local build to catch TS/build errors early
 npm run build || exit 1
 
-# Run unit tests directly (skip npm pretest to avoid double build)
-node scripts/run-tests.mjs || exit 1
+# Run a fast subset of tests (CI runs full suite). Exclude SSE-heavy tests.
+node --test \
+  tests/http*.mjs \
+  tests/cli-*.mjs \
+  tests/sends.test.mjs \
+  tests/timelines.test.mjs \
+  tests/errors.test.mjs || exit 1
 
 # Optional: pack contents check to avoid accidental file leaks
 npm run ci:pack-check || exit 1

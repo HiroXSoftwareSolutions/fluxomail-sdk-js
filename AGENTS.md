@@ -100,6 +100,7 @@ CLI Tips
 Infrastructure PRs
 ------------------
 - Branches under `infra/**` automatically open a PR to `main` via `.github/workflows/auto-open-pr.yml`.
+ - After pushing, the PR appears within a few seconds; no additional action needed.
 
 When touching CI/Release
 ------------------------
