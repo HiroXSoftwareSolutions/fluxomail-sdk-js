@@ -27,8 +27,7 @@ jobs:
           repo=$(echo "$REPO" | cut -d/ -f2)
           url="https://api.github.com/repos/$owner/$repo/branches/$BRANCH/protection"
           # Required checks must match CI job names exactly
-          payload=$(cat <<'JSON'
-          {
+          payload='{
             "required_status_checks": {
               "strict": true,
               "contexts": [
@@ -44,9 +43,7 @@ jobs:
             "restrictions": null,
             "allow_force_pushes": false,
             "allow_deletions": false
-          }
-JSON
-          )
+          }'
           curl -fsSL -X PUT "$url" \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
