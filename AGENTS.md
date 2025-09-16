@@ -97,6 +97,10 @@ CLI Tips
 - `init next`, `init next-app`, `init worker` scaffold examples (creates directories).
 - `.fluxomailrc` centralizes defaults (apiKey, base, version, tokenCmd).
 
+Infrastructure PRs
+------------------
+- Branches under `infra/**` automatically open a PR to `main` via `.github/workflows/auto-open-pr.yml`.
+
 When touching CI/Release
 ------------------------
 - Keep PR fast: don’t add heavy steps to PR workflows.

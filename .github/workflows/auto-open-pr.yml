@@ -1,0 +1,46 @@
+name: Auto Open PR for infra branches
+
+on:
+  push:
+    branches:
+      - 'infra/**'
+
+jobs:
+  open:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Open PR to main if missing
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const headBranch = context.ref.replace('refs/heads/','')
+            const head = `${owner}:${headBranch}`
+            const base = 'main'
+
+            const existing = await github.rest.pulls.list({ owner, repo, head, state: 'open' })
+            if (existing.data && existing.data.length > 0) {
+              core.info(`PR already exists: ${existing.data[0].html_url}`)
+              return
+            }
+
+            const title = 'ci: add branch-protection updater + release dry-run'
+            const body = [
+              'Adds a manual workflow to set exact required checks on a branch (default main).',
+              '',
+              '- .github/workflows/update-branch-protection.yml',
+              '  - Requires repo secret GH_ADMIN_TOKEN (branch-admin).',
+              '  - Sets required checks:',
+              '    - CI / build-and-test (18.x) (pull_request)',
+              '    - CI / build-and-test (20.x) (pull_request)',
+              '    - Commitlint / commitlint (pull_request)',
+              '',
+              'Adds dry_run input to Release workflow to validate builds without publishing.'
+            ].join('\n')
+
+            const pr = await github.rest.pulls.create({ owner, repo, title, head: headBranch, base, body })
+            core.info(`Opened PR: ${pr.data.html_url}`)
