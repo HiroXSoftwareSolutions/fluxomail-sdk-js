@@ -20,7 +20,6 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: npm-publish
     permissions:
       id-token: write
       contents: read
@@ -50,8 +49,8 @@ jobs:
       - name: Preflight: NPM token present
         run: |
           if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
-            echo "NPM_TOKEN secret is not configured for environment 'npm-publish'."
-            echo "Create an npm automation token and add it as an environment secret to proceed."
+            echo "NPM_TOKEN secret is not configured."
+            echo "Create an npm Automation token and add it as a repository secret named NPM_TOKEN."
             exit 1
           fi
       - name: Who am I (npm)
