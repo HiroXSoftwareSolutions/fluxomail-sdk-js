@@ -48,12 +48,22 @@ jobs:
             title=$(echo "$info" | jq -r '.title // ""')
             labels=$(echo "$info" | jq -r '.labels // [] | join(",")')
             shopt -s nocasematch || true
+            # Semver label overrides
+            if echo "$labels" | grep -Eqi '\b(semver:major|release[:/ ]?major|type[:/ ]?major)\b'; then
+              BUMP="major"
+            elif echo "$labels" | grep -Eqi '\b(semver:minor|release[:/ ]?minor|type[:/ ]?minor)\b'; then
+              BUMP="minor"
+            fi
             if echo "$labels" | grep -Eqi '(release[:/ ]|semver[:/ ]|type[:/ ])?\s*major|\bmajor\b'; then
               BUMP="major"
             elif echo "$labels" | grep -Eqi '(release[:/ ]|semver[:/ ]|type[:/ ])?\s*minor|\bminor\b'; then
               BUMP="minor"
             elif printf "%s" "$title" | grep -Eq '^feat(\(|:|!)'; then
               BUMP="minor"
+            fi
+            # Exact version from package.json
+            if echo "$labels" | grep -Eqi '\b(release:use-version|release:exact)\b'; then
+              BUMP="none"
             fi
             shopt -u nocasematch || true
           fi
@@ -86,8 +96,12 @@ jobs:
           BUMP: ${{ steps.bump.outputs.bump }}
         run: |
           set -euo pipefail
-          # Initial bump without creating a tag; commit may be blocked by protection later.
-          npm version "$BUMP" --no-git-tag-version
+          if [ "${BUMP}" = "none" ]; then
+            echo "Using existing package.json version (no bump)"
+          else
+            # Initial bump without creating a tag; commit may be blocked by protection later.
+            npm version "$BUMP" --no-git-tag-version
+          fi
           V=$(node -p "require('./package.json').version")
           # If tag already exists (e.g., from a previous attempt), keep bumping patch until free
           while git rev-parse -q --verify "refs/tags/v$V" >/dev/null; do
@@ -132,11 +146,63 @@ jobs:
         run: npm publish --provenance --access public
 
       - name: Push commit and tags
+        id: push
+        run: |
+          set -e
+          # Always push tags first (safe + idempotent)
+          git push origin --tags || true
+          # Try pushing the bump commit to main; record exit code for PR fallback
+          set +e
+          git push origin HEAD:main --follow-tags
+          ec=$?
+          set -e
+          echo "push_status=$ec" >> "$GITHUB_OUTPUT"
+
+      - name: Create bump branch when main push blocked
+        if: steps.push.outputs.push_status != '0'
+        id: bumpbranch
         run: |
           set -euo pipefail
-          # Push tag; commit push may be blocked by branch protection and is non-fatal
-          git push origin --tags || true
-          git push origin HEAD:main --follow-tags || true
+          BR="release/bump-v${{ steps.bumpver.outputs.version }}"
+          git push origin "HEAD:refs/heads/$BR" --force
+          echo "branch=$BR" >> "$GITHUB_OUTPUT"
+
+      - name: Open bump PR from branch
+        if: steps.push.outputs.push_status != '0'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const version = process.env.VERSION
+            const head = process.env.HEAD_BRANCH
+            const base = 'main'
+            const fs = require('fs')
+            let body = ''
+            try {
+              body = fs.readFileSync('.github/PULL_REQUEST_TEMPLATE/release-bump.md', 'utf8')
+              body = body.replaceAll('{{VERSION}}', version)
+            } catch (e) {
+              body = `Automated release bump to ${version}`
+            }
+            // If PR already open, do nothing
+            const existing = await github.rest.pulls.list({ owner, repo, head: `${owner}:${head}`, state: 'open' })
+            if (existing.data?.length) {
+              core.info(`Bump PR already exists: ${existing.data[0].html_url}`)
+              return
+            }
+            const title = `chore(main): release ${version} [release-bump]`
+            const pr = await github.rest.pulls.create({ owner, repo, title, head, base, body })
+            core.info(`Opened bump PR: ${pr.data.html_url}`)
+            try {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: pr.data.number, labels: ['release-bump','semver:patch'] })
+            } catch (e) {
+              core.warning(`Could not add labels: ${e?.message || e}`)
+            }
+        env:
+          VERSION: ${{ steps.bumpver.outputs.version }}
+          HEAD_BRANCH: ${{ steps.bumpbranch.outputs.branch }}
+        continue-on-error: true
 
       - name: Summary
         run: |

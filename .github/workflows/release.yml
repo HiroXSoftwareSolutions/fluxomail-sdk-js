@@ -1,11 +1,6 @@
-name: Release
+name: Release (manual)
 
 on:
-  push:
-    tags:
-      - 'v*'
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       ref:
