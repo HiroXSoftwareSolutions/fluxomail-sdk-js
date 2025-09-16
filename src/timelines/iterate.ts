@@ -12,7 +12,7 @@ export async function* iterateTimeline<T = unknown>(client: HttpClient, opts: It
     if (pages >= maxPages) return;
     let page: GetTimelineResponse<T> | null = null;
     try {
-      const resp = await client.request<OpenAPITimelineResponse>('GET', `/sends/${encodeURIComponent(opts.sendId)}`, { query: { cursor, limit: opts.limit }, signal: opts.signal });
+      const resp = await client.request<OpenAPITimelineResponse>('GET', `/sends/${encodeURIComponent(opts.sendId)}`, { query: { cursor, limit: opts.limit }, signal: opts.signal, timeoutMs: opts.timeoutMs, retry: opts.retry });
       page = resp as unknown as GetTimelineResponse<T>;
     } catch (e: any) {
       if (String(e?.code || '').toLowerCase() === 'rate_limited' && typeof e?.retryAfterMs === 'number') {

@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 This project uses SemVer. During 0.x, breaking changes may occur in minor versions.
 
+## 0.4.0 - 2025-09-16
+- CLI
+  - feat: `whoami` command to validate auth quickly
+  - feat: `init next`, `init next-app`, and `init worker` scaffolds (create directories as needed)
+  - feat: `.fluxomailrc` config support (`apiKey`, `base`, `version`, `tokenCmd`) and `--config <path>`
+  - feat: `send --header k:v` to add custom message headers
+  - feat: `events backfill --max-pages` to bound historical scans
+- SDK
+  - feat: per-request overrides for reads (`timeoutMs`, `retry` on events/timelines)
+  - feat: SSE callbacks (`onOpen`, `onError`, `onReconnect`) and tunable backoff
+  - feat: Templates API (create/get/list/update/delete/render)
+  - feat: Webhooks helpers (HMAC SHA256 signature verification + JSON envelope parsing; Node-only)
+- DX & Docs
+  - docs: README updates for SSE callbacks/backoff, per-request overrides, Templates, Webhooks
+  - docs: Mintlify docs updated (CLI features, SDK examples)
+- Security & Maintenance
+  - chore: add CodeQL workflow and Dependabot config
+
 ## 0.3.0 - 2025-09-14
 - OpenAPI adoption (phase 2): use generated types in send and events and add compile-time shape checks while keeping public API stable
 - Abortable requests across SDK; REST token auto-refresh via `getToken`

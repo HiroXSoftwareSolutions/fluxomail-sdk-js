@@ -110,11 +110,26 @@ export class HttpClient {
       idempotencyKey?: string;
       timeoutMs?: number;
       signal?: AbortSignal;
+      retry?: RetryPolicy;
     } = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${path}${buildQuery(opts.query ?? {})}`;
 
-    const maxAttempts = this.retryPolicy.maxAttempts;
+    const policy: Required<RetryPolicy> = {
+      maxAttempts: opts.retry?.maxAttempts ?? this.retryPolicy.maxAttempts,
+      retriableStatuses: opts.retry?.retriableStatuses ?? this.retryPolicy.retriableStatuses,
+      baseDelayMs: opts.retry?.baseDelayMs ?? this.retryPolicy.baseDelayMs,
+      maxDelayMs: opts.retry?.maxDelayMs ?? this.retryPolicy.maxDelayMs,
+    } as Required<RetryPolicy>;
+    const maxAttempts = policy.maxAttempts;
+    const shouldRetry = (m: string, status?: number) => {
+      const idempotent = m === 'GET' || m === 'HEAD';
+      if (!idempotent) return false;
+      if (status === undefined) return true;
+      if (policy.retriableStatuses.includes(status)) return true;
+      if (status >= 500 && status <= 599) return true;
+      return false;
+    };
     let lastErr: unknown;
     let didAuthRefresh = false;
 
@@ -164,17 +179,17 @@ export class HttpClient {
             const next = await this.tokenRefresher();
             if (next) this.auth.setToken(next);
             didAuthRefresh = true;
-            // Retry immediately with new token
-            await sleep(jitteredBackoff(0));
+            // Retry immediately with new token (with minimal backoff)
+            await sleep(jitteredBackoff(0, policy.baseDelayMs, policy.maxDelayMs));
             continue;
           } catch {
             // fall through to classification
           }
         }
 
-        if (this.shouldRetry(method, res.status) && attempt < maxAttempts - 1) {
+        if (shouldRetry(method, res.status) && attempt < maxAttempts - 1) {
           const retryAfter = res.status === 429 ? Number(res.headers.get('retry-after')) : undefined;
-          const wait = retryAfter && !Number.isNaN(retryAfter) ? retryAfter * 1000 : jitteredBackoff(attempt, this.retryPolicy.baseDelayMs, this.retryPolicy.maxDelayMs);
+          const wait = retryAfter && !Number.isNaN(retryAfter) ? retryAfter * 1000 : jitteredBackoff(attempt, policy.baseDelayMs, policy.maxDelayMs);
           clearTimeout(timeout);
           if (this.afterResponse) await this.afterResponse({ method, url, status: res.status, headers: res.headers, requestId });
           await sleep(wait);
@@ -194,8 +209,8 @@ export class HttpClient {
           throw new TimeoutError();
         }
         // Network or other error
-        if (this.shouldRetry(method) && attempt < maxAttempts - 1) {
-          await sleep(jitteredBackoff(attempt, this.retryPolicy.baseDelayMs, this.retryPolicy.maxDelayMs));
+        if (shouldRetry(method) && attempt < maxAttempts - 1) {
+          await sleep(jitteredBackoff(attempt, policy.baseDelayMs, policy.maxDelayMs));
           continue;
         }
         throw new NetworkError((err as Error)?.message ?? 'Network error');
@@ -224,10 +239,25 @@ export class HttpClient {
       idempotencyKey?: string;
       timeoutMs?: number;
       signal?: AbortSignal;
+      retry?: RetryPolicy;
     } = {}
   ): Promise<{ data: T; meta: { status: number; headers: Headers; requestId?: string } }> {
     const url = `${this.baseUrl}${path}${buildQuery(opts.query ?? {})}`;
-    const maxAttempts = this.retryPolicy.maxAttempts;
+    const policy: Required<RetryPolicy> = {
+      maxAttempts: opts.retry?.maxAttempts ?? this.retryPolicy.maxAttempts,
+      retriableStatuses: opts.retry?.retriableStatuses ?? this.retryPolicy.retriableStatuses,
+      baseDelayMs: opts.retry?.baseDelayMs ?? this.retryPolicy.baseDelayMs,
+      maxDelayMs: opts.retry?.maxDelayMs ?? this.retryPolicy.maxDelayMs,
+    } as Required<RetryPolicy>;
+    const maxAttempts = policy.maxAttempts;
+    const shouldRetry = (m: string, status?: number) => {
+      const idempotent = m === 'GET' || m === 'HEAD';
+      if (!idempotent) return false;
+      if (status === undefined) return true;
+      if (policy.retriableStatuses.includes(status)) return true;
+      if (status >= 500 && status <= 599) return true;
+      return false;
+    };
     let lastErr: unknown;
     let didAuthRefresh = false;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -262,13 +292,13 @@ export class HttpClient {
             const next = await this.tokenRefresher();
             if (next) this.auth.setToken(next);
             didAuthRefresh = true;
-            await sleep(jitteredBackoff(0, this.retryPolicy.baseDelayMs, this.retryPolicy.maxDelayMs));
+            await sleep(jitteredBackoff(0, policy.baseDelayMs, policy.maxDelayMs));
             continue;
           } catch {}
         }
-        if (this.shouldRetry(method, status) && attempt < maxAttempts - 1) {
+        if (shouldRetry(method, status) && attempt < maxAttempts - 1) {
           const retryAfter = status === 429 ? Number(res.headers.get('retry-after')) : undefined;
-          const wait = retryAfter && !Number.isNaN(retryAfter) ? retryAfter * 1000 : jitteredBackoff(attempt, this.retryPolicy.baseDelayMs, this.retryPolicy.maxDelayMs);
+          const wait = retryAfter && !Number.isNaN(retryAfter) ? retryAfter * 1000 : jitteredBackoff(attempt, policy.baseDelayMs, policy.maxDelayMs);
           clearTimeout(timeout);
           if (this.afterResponse) await this.afterResponse({ method, url, status, headers: res.headers, requestId });
           await sleep(wait);
@@ -283,8 +313,8 @@ export class HttpClient {
         lastErr = err;
         if (err instanceof FluxomailError) throw err;
         if (err instanceof DOMException && err.name === 'AbortError') throw new TimeoutError();
-        if (this.shouldRetry(method) && attempt < maxAttempts - 1) {
-          await sleep(jitteredBackoff(attempt, this.retryPolicy.baseDelayMs, this.retryPolicy.maxDelayMs));
+        if (shouldRetry(method) && attempt < maxAttempts - 1) {
+          await sleep(jitteredBackoff(attempt, policy.baseDelayMs, policy.maxDelayMs));
           continue;
         }
         throw new NetworkError((err as Error)?.message ?? 'Network error');

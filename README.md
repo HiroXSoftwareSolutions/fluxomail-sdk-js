@@ -110,6 +110,12 @@ fluxomail events list --api-key $FLUXOMAIL_API_KEY --types email.delivered --lim
 fluxomail events tail --api-key $FLUXOMAIL_API_KEY --types email.*
 fluxomail events backfill --api-key $FLUXOMAIL_API_KEY --types email.* --checkpoint-file .fluxomail.ckpt
 fluxomail timelines get --api-key $FLUXOMAIL_API_KEY --send-id send_abc123 --limit 100
+fluxomail whoami --api-key $FLUXOMAIL_API_KEY
+
+# Init scaffolds
+fluxomail init next ./      # writes pages/api/fluxomail/token.ts (creates dirs)
+fluxomail init worker ./  # writes examples/workers/worker.js
+fluxomail init next-app ./ # writes app/api/fluxomail/token/route.ts (creates dirs)
 ```
 
 ## Configuration
@@ -134,6 +140,18 @@ new Fluxomail({
 - API key must never be used in the browser. Use a short-lived token minted by your server.
 - The SDK sends `Fluxomail-Version: <date>` on every request to pin behavior.
 
+Subscribe callbacks and backoff (SSE):
+
+```ts
+const sub = fm.events.subscribe({
+  types: ['email.*'],
+  onOpen: () => console.log('connected'),
+  onError: (e) => console.log('sse error', e),
+  onReconnect: (attempt, delay) => console.log('reconnecting', { attempt, delay }),
+  backoff: { baseDelayMs: 100, maxDelayMs: 1000 },
+}, (evt) => { /* ... */ })
+```
+
 ## Error Handling
 
 All errors extend `FluxomailError` and include `code`, `status`, and optional `requestId`.
@@ -157,6 +175,14 @@ try {
 - Create a server route to mint short-lived tokens scoped to the user/org.
 - In the browser, initialize with `token` only and call `events.subscribe()` which passes the token to the SSE endpoint as a query parameter.
 - Optional: pass `getToken` in the client config to auto-refresh REST requests after a 401.
+- Use `getToken` in `events.subscribe` for auto-refresh and `checkpoint` to resume after reloads.
+
+Per-request overrides (timeout/retry) for reads:
+
+```ts
+// Only this call uses custom retry/timeout
+await fm.events.list({ limit: 1, retry: { maxAttempts: 5, baseDelayMs: 100 }, timeoutMs: 2000 })
+```
 
 ## Attachments in Browser
 
@@ -167,13 +193,84 @@ try {
 
 - Build: `npm run build`
 - Test: `npm test`
- - Test: `npm test`
- - E2E smoke (requires staging env vars): `npm run smoke:e2e`
+- E2E smoke (requires staging env vars): `npm run smoke:e2e`
 
 ## Examples
 
 - Node quickstart: `examples/node/quickstart.mjs`
 - Next.js browser token + SSE: `examples/next/`
+
+## Templates
+
+Basic helpers for managing and rendering templates.
+
+```ts
+// Create
+const t = await fm.templates.create({ name: 'Welcome', subject: 'Hi {{name}}', htmlContent: '<h1>Hi {{name}}</h1>' })
+
+// Update
+await fm.templates.update(t.id, { subject: 'Hello {{name}}' })
+
+// Get
+const latest = await fm.templates.get(t.id)
+
+// List
+const list = await fm.templates.list({ limit: 10 })
+
+// Render (server-side)
+const rendered = await fm.templates.render(t.id, { variables: { name: 'Pat' } })
+
+// Delete
+await fm.templates.delete(t.id)
+```
+
+## Webhooks (Node)
+
+Verify signatures and parse event envelopes on your server.
+
+```ts
+import { webhooks } from '@fluxomail/sdk'
+
+export async function handler(req, res) {
+  const raw = await getRawBody(req) // do not JSON.parse yet
+  const ok = webhooks.verifyHmacSignature(raw, req.headers, { secret: process.env.FLUXOMAIL_WEBHOOK_SECRET!, headerName: 'fluxomail-signature' })
+  if (!ok) return res.status(401).end('invalid signature')
+  const out = webhooks.verifyAndParse(raw, req.headers, { secret: process.env.FLUXOMAIL_WEBHOOK_SECRET! })
+  if (!out.ok) return res.status(401).end('invalid signature')
+  for (const evt of out.events) {
+    // handle evt
+  }
+  res.status(200).end('ok')
+}
+```
+
+Note: Use raw request body (disable body parsers or capture raw data) to validate signatures.
+
+## .fluxomailrc
+
+Centralize default CLI settings in a JSON file. The CLI reads config in this precedence:
+- `--config <path>`
+- `.fluxomailrc` in current working directory
+- `~/.fluxomailrc`
+
+Supported keys:
+- `apiKey`: string — default API key (equivalent to `--api-key`)
+- `base`: string — API base URL (equivalent to `--base`)
+- `version`: string — API version header (equivalent to `--version`)
+- `tokenCmd`: string — shell command that prints a short-lived token (equivalent to `--token-cmd`)
+
+Example `.fluxomailrc`:
+
+```json
+{
+  "apiKey": "YOUR_API_KEY",
+  "base": "https://api.fluxomail.com/api/v1",
+  "version": "2025-09-01",
+  "tokenCmd": "printf token-123"
+}
+```
+
+Tip: You can keep API keys out of the file and rely on environment variables or just set `tokenCmd` for browser-like flows.
 
 ## Support Matrix
 
@@ -191,7 +288,7 @@ We welcome contributions! Please see `CONTRIBUTING.md` for local setup, testing,
 ## Code of Conduct
 
 This project follows the Contributor Covenant. By participating, you agree to uphold our `CODE_OF_CONDUCT.md`. For issues, email support@fluxomail.com.
-- Use `getToken` in `events.subscribe` for auto-refresh and `checkpoint` to resume after reloads.
+
 ## Response Metadata
 
 - Use `listWithMeta`, `getWithMeta`, or `sendWithMeta` to access `requestId`, status, and headers.

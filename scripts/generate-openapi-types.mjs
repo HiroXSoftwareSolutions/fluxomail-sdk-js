@@ -14,10 +14,10 @@ async function main() {
   } catch {}
   try {
     const envSpec = process.env.FLUXOMAIL_OPENAPI
-    const fallbackSpec = '/Users/pierreillsley/Documents/GitHub/email-service/openapi/2025-09-01.yaml'
+    // Prefer env var; fall back to a repo-relative sibling email-service checkout if present
+    const fallbackSpec = path.join(root, '..', 'email-service', 'openapi', '2025-09-01.yaml')
     let spec = envSpec && envSpec.trim() ? envSpec.trim() : ''
     if (!spec) {
-      // Use fallback if present locally
       try { await stat(fallbackSpec); spec = fallbackSpec } catch {}
     }
     if (openapiTS && spec) {

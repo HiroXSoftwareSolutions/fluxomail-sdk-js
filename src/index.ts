@@ -20,6 +20,8 @@ import { iterateEvents } from './events/iterate.js';
 import { sendEmail, sendEmailWithMeta } from './sends/send.js';
 import { getTimeline, getTimelineWithMeta } from './timelines/get.js';
 import { iterateTimeline } from './timelines/iterate.js';
+import { createTemplate, getTemplate, listTemplates, updateTemplate, deleteTemplate, renderTemplate } from './templates/index.js';
+export * as webhooks from './webhooks/index.js';
 
 export * from './core/errors.js';
 export * from './core/types.js';
@@ -59,6 +61,18 @@ export class Fluxomail {
       get: <T = unknown>(opts: GetTimelineOptions): Promise<GetTimelineResponse<T>> => getTimeline<T>(client, opts),
       getWithMeta: <T = unknown>(opts: GetTimelineOptions) => getTimelineWithMeta<T>(client, opts),
       iterate: <T = unknown>(opts: GetTimelineOptions & { maxPages?: number }) => iterateTimeline<T>(client, opts),
+    } as const;
+  }
+
+  get templates() {
+    const client = this.client;
+    return {
+      create: (req: import('./core/types.js').CreateTemplateRequest) => createTemplate(client, req),
+      get: (id: string, opts: { signal?: AbortSignal; timeoutMs?: number } = {}) => getTemplate(client, id, opts),
+      list: (opts: import('./core/types.js').ListTemplatesOptions = {}) => listTemplates(client, opts),
+      update: (id: string, req: import('./core/types.js').UpdateTemplateRequest) => updateTemplate(client, id, req),
+      delete: (id: string, opts: { signal?: AbortSignal; timeoutMs?: number } = {}) => deleteTemplate(client, id, opts),
+      render: (id: string, req: import('./core/types.js').RenderTemplateRequest) => renderTemplate(client, id, req),
     } as const;
   }
 }

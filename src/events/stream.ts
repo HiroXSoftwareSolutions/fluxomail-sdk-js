@@ -15,6 +15,8 @@ export function subscribe<T = unknown>(client: HttpClient, opts: SubscribeOption
   let es: EventSource | null = null;
   let attempt = 0;
   let latestSince = opts.since;
+  const baseDelay = opts.backoff?.baseDelayMs ?? 250;
+  const maxDelay = opts.backoff?.maxDelayMs ?? 2000;
   const controller = new AbortController();
   if (opts.signal) {
     if (opts.signal.aborted) controller.abort();
@@ -54,6 +56,9 @@ export function subscribe<T = unknown>(client: HttpClient, opts: SubscribeOption
     }
     /* c8 ignore stop */
 
+    // lifecycle callbacks
+    (es as any).onopen = () => { try { opts.onOpen?.(); } catch {} };
+
     es.onmessage = (ev) => {
       try {
         const data = ev.data ? JSON.parse(ev.data) : undefined;
@@ -72,7 +77,9 @@ export function subscribe<T = unknown>(client: HttpClient, opts: SubscribeOption
     es.onerror = () => {
       if (closed || controller.signal.aborted) return;
       es?.close();
-      const wait = jitteredBackoff(attempt++);
+      const wait = jitteredBackoff(attempt++, baseDelay, maxDelay);
+      try { opts.onError?.(); } catch {}
+      try { opts.onReconnect?.(attempt, wait); } catch {}
       setTimeout(start, wait);
     };
   };
