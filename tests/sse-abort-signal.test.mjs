@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Fluxomail } from '../dist/index.js';
 import { startTestServer } from './helpers/server.mjs';
 
-test('SSE subscribe respects external AbortSignal', async () => {
+test('SSE subscribe respects external AbortSignal', { timeout: 5000 }, async () => {
   const server = await startTestServer({
     'SSE /events/stream': (req, res, url) => {
       res.writeHead(200, {
@@ -25,4 +25,3 @@ test('SSE subscribe respects external AbortSignal', async () => {
     assert.ok(true);
   } finally { await server.close(); }
 });
-

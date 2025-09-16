@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Fluxomail } from '../dist/index.js'
 import { startTestServer } from './helpers/server.mjs'
 
-test('SSE subscribe invokes onOpen and onReconnect', async () => {
+test('SSE subscribe invokes onOpen and onReconnect', { timeout: 8000 }, async () => {
   let connections = 0
   const server = await startTestServer({
     'SSE /events/stream': (req, res, url) => {
@@ -31,4 +31,3 @@ test('SSE subscribe invokes onOpen and onReconnect', async () => {
     assert.ok(reconnects >= 0)
   } finally { await server.close() }
 })
-

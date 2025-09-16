@@ -3,8 +3,6 @@ name: CodeQL
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   schedule:
     - cron: '0 6 * * 1'
 
@@ -21,4 +19,3 @@ jobs:
         with:
           languages: javascript
       - uses: github/codeql-action/analyze@4f3212b2a26d69b4a118f1d194781f0bcb6887d2 # v3
-
