@@ -23,6 +23,8 @@ concurrency:
 
 jobs:
   publish:
+    # Only run on tag push, published release, or manual dispatch
+    if: ${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') || inputs.ref != '' }}
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
@@ -43,9 +45,9 @@ jobs:
       - name: Install deps
         run: npm ci
       - name: Generate OpenAPI types (optional)
+        if: ${{ vars.FLUXOMAIL_OPENAPI != '' }}
         env:
           FLUXOMAIL_OPENAPI: ${{ vars.FLUXOMAIL_OPENAPI }}
-        if: ${{ env.FLUXOMAIL_OPENAPI != '' }}
         run: npm run codegen:openapi
       - name: Run tests
         run: npm test

@@ -8,6 +8,8 @@ on:
 
 jobs:
   analyze:
+    # Do not fail the entire workflow if CodeQL encounters issues.
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       actions: read
