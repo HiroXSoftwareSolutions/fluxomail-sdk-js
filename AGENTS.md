@@ -109,3 +109,4 @@ When touching CI/Release
 - Avoid blocking PRs on CodeQL; let it run on main and on a schedule.
 
 Auto‑publish: Merges to main now bump + tag + publish inline to npm.
+\nMinor note: trigger publish.
