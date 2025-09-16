@@ -55,7 +55,8 @@ jobs:
 
       - name: Compute current version
         id: ver
-        run: echo "current=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          node -e "console.log('current=' + require('./package.json').version)" >> "$GITHUB_OUTPUT"
 
       - name: Bump version and create tag
         env:
@@ -72,4 +73,3 @@ jobs:
       - name: Summary
         run: |
           echo "Auto-release bump pushed. Tag will trigger publish workflow."
-
