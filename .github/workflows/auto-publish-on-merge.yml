@@ -1,0 +1,75 @@
+name: Auto Publish on Merge
+
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: auto-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bump_and_tag:
+    # Skip if this push is already the release bump commit or a tag push
+    if: >-
+      ${{ !startsWith(github.ref, 'refs/tags/') && !contains(github.event.head_commit.message, '[release-bump]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Determine bump type from PR labels/title (default patch)
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          BUMP="patch"
+          PR_NUM=$(printf "%s" "$COMMIT_MSG" | sed -n 's/.*(#\([0-9]\+\)).*/\1/p') || true
+          if [ -n "${PR_NUM:-}" ]; then
+            info=$(gh pr view "$PR_NUM" --json labels,title --jq '{labels: [.labels[].name], title: .title}' || echo '{}')
+            title=$(echo "$info" | jq -r '.title // ""')
+            labels=$(echo "$info" | jq -r '.labels // [] | join(",")')
+            shopt -s nocasematch || true
+            if echo "$labels" | grep -Eqi '(release[:/ ]|semver[:/ ]|type[:/ ])?\s*major|\bmajor\b'; then
+              BUMP="major"
+            elif echo "$labels" | grep -Eqi '(release[:/ ]|semver[:/ ]|type[:/ ])?\s*minor|\bminor\b'; then
+              BUMP="minor"
+            elif printf "%s" "$title" | grep -Eq '^feat(\(|:|!)'; then
+              BUMP="minor"
+            fi
+            shopt -u nocasematch || true
+          fi
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "Selected bump: $BUMP (PR #${PR_NUM:-n/a})"
+
+      - name: Configure git
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+
+      - name: Compute current version
+        id: ver
+        run: echo "current=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version and create tag
+        env:
+          BUMP: ${{ steps.bump.outputs.bump }}
+        run: |
+          set -euo pipefail
+          npm version "$BUMP" -m "chore(main): release %s [release-bump]"
+
+      - name: Push commit and tags
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main --follow-tags
+
+      - name: Summary
+        run: |
+          echo "Auto-release bump pushed. Tag will trigger publish workflow."
+
