@@ -9,14 +9,7 @@ on:
         default: 'main'
 
 jobs:
-  noop-guard:
-    if: ${{ github.event_name != 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Skipped: manual-only workflow"
-
   protect:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - name: Update branch protection via REST API
