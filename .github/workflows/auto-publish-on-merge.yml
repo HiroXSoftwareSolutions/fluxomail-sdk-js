@@ -114,7 +114,7 @@ jobs:
           git tag -a "v$V" -m "Release v$V" || true
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
-      - name: Preflight: NPM token present
+      - name: "Preflight: NPM token present"
         run: |
           if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
             echo "NPM_TOKEN secret is not configured for environment 'npm-publish'." >&2
@@ -140,7 +140,7 @@ jobs:
           fi
 
       - name: Publish to npm with provenance
-        if: steps.exists.outputs.exists == 'false'
+        if: ${{ steps.exists.outputs.exists == 'false' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
@@ -159,7 +159,7 @@ jobs:
           echo "push_status=$ec" >> "$GITHUB_OUTPUT"
 
       - name: Create bump branch when main push blocked
-        if: steps.push.outputs.push_status != '0'
+        if: ${{ steps.push.outputs.push_status != '0' }}
         id: bumpbranch
         run: |
           set -euo pipefail
@@ -168,7 +168,7 @@ jobs:
           echo "branch=$BR" >> "$GITHUB_OUTPUT"
 
       - name: Open bump PR from branch
-        if: steps.push.outputs.push_status != '0'
+        if: ${{ steps.push.outputs.push_status != '0' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
