@@ -1,0 +1,47 @@
+name: Release From Branch
+
+on:
+  push:
+    branches:
+      - 'v*.*.*'
+      - '*.*.*'
+
+jobs:
+  prepare-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
+      - name: Compute version from branch
+        id: ver
+        run: |
+          set -euo pipefail
+          REF="${GITHUB_REF##*/}"
+          # strip optional leading v
+          BRANCH_VER="${REF#v}"
+          echo "branch_version=$BRANCH_VER" >> "$GITHUB_OUTPUT"
+          PKG_VER=$(node -p "require('./package.json').version")
+          echo "pkg_version=$PKG_VER" >> "$GITHUB_OUTPUT"
+          if [ "$BRANCH_VER" != "$PKG_VER" ]; then
+            echo "Branch name ($BRANCH_VER) must equal package.json version ($PKG_VER)." >&2
+            echo "Run: npm version $BRANCH_VER and commit before pushing." >&2
+            exit 1
+          fi
+      - name: Create and push tag if missing
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.branch_version }}"
+          TAG="v$V"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists; nothing to do."
+          else
+            git config user.name github-actions
+            git config user.email github-actions@github.com
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "Pushed tag $TAG"
+          fi
+
