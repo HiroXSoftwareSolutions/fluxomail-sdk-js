@@ -36,7 +36,7 @@
     "test:coverage": "c8 --reporter=text --reporter=lcov --exclude=bin/** --exclude=tests/** --exclude=**/src/events/stream.ts npm test",
     "commitlint": "commitlint --from=origin/main --to=HEAD --verbose",
     "setup:hooks": "git config core.hooksPath .husky",
-    "prepare": "npm run build:dist",
+    "prepare": "husky install && npm run build:dist",
     "release:tag": "node -e \"const v=require('./package.json').version; const {execSync}=require('node:child_process'); execSync('git tag v'+v,{stdio:'inherit'}); console.log('Tagged v'+v)\"",
     "release:tag:push": "node -e \"const v=require('./package.json').version; console.log('Pushing tag v'+v)\" && git push origin v$(node -p \"require('./package.json').version\")"
   },
@@ -50,11 +50,11 @@
   "author": "Fluxomail",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fluxomail/fluxomail-sdk-js.git"
+    "url": "https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js"
   },
   "homepage": "https://docs.fluxomail.com/api-reference/fluxomail/cli",
   "bugs": {
-    "url": "https://github.com/fluxomail/fluxomail-sdk-js/issues"
+    "url": "https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/issues"
   },
   "license": "Apache-2.0",
   "publishConfig": {

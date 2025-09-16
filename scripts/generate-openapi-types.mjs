@@ -25,12 +25,22 @@ async function main() {
       await writeFile(outFile, String(types))
       console.log('Generated types to', outFile)
       return
+    } catch (e) {
+      console.error('OpenAPI codegen failed:', e && e.message ? e.message : String(e))
     }
-  } catch (e) {
-    console.error('OpenAPI codegen failed:', e && e.message ? e.message : String(e))
+  } else if (envSpec) {
+    console.warn('FLUXOMAIL_OPENAPI is set but not a valid file/URL; writing stub types')
+  } else {
+    console.log('FLUXOMAIL_OPENAPI not provided; writing stub types')
   }
-  await writeFile(outFile, "// Placeholder types\nexport type Placeholder = unknown;\n")
-  console.log('Wrote placeholder types to', outFile)
+
+  const stub = `// Auto-generated stub (no OpenAPI spec available)\n` +
+`export type HttpMethod = 'get'|'put'|'post'|'delete'|'patch'|'options'|'head'|'trace';\n` +
+`export type paths = Record<string, Partial<Record<HttpMethod, any>>>;\n` +
+`export type components = { schemas?: Record<string, any> } & Record<string, any>;\n`
+
+  await writeFile(outFile, stub)
+  console.log('Wrote stub types to', outFile)
 }
 
 main().catch(() => {})
