@@ -22,6 +22,7 @@ import { getTimeline, getTimelineWithMeta } from './timelines/get.js';
 import { iterateTimeline } from './timelines/iterate.js';
 import { createTemplate, getTemplate, listTemplates, updateTemplate, deleteTemplate, renderTemplate } from './templates/index.js';
 export * as webhooks from './webhooks/index.js';
+export * as audience from './audience/index.js';
 
 export * from './core/errors.js';
 export * from './core/types.js';
