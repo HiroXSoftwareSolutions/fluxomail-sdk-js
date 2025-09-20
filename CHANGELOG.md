@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 This project uses SemVer. During 0.x, breaking changes may occur in minor versions.
 
+## 0.4.4 - 2025-09-20
+- feat: expose audience module via SDK index export
+
 ## 0.4.3 - 2025-09-16
 - build: auto-publish workflow now releases on merge without branch-protection conflicts
 - docs: release guide documents the merge-triggered publish path
