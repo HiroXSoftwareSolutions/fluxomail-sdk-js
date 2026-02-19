@@ -74,13 +74,16 @@ export class HttpClient {
     return this.customFetch ?? fetch;
   }
 
-  private makeHeaders(extra?: Record<string, string>): Headers {
-    const headers = new Headers({
-      'Content-Type': 'application/json',
+  private makeHeaders(extra?: Record<string, string>, hasBody?: boolean): Headers {
+    const base: Record<string, string> = {
       'Fluxomail-Version': this.version,
       ...this.auth.asHeaders(),
       ...extra,
-    });
+    };
+    // Only set Content-Type when there's a request body.
+    // Setting it on GET/HEAD triggers unnecessary CORS preflights in browsers.
+    if (hasBody) base['Content-Type'] = 'application/json';
+    const headers = new Headers(base);
     if (isNode()) {
       // Many servers ignore UA from browsers; set only in Node
       const version = (pkg as any)?.version || '0.0.0';
@@ -141,7 +144,8 @@ export class HttpClient {
           else opts.signal.addEventListener('abort', () => controller.abort(), { once: true });
         }
         const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? this.timeoutMs);
-        const headers = this.makeHeaders({ ...opts.headers });
+        const hasBody = opts.body !== undefined;
+        const headers = this.makeHeaders({ ...opts.headers }, hasBody);
         if (opts.idempotencyKey) headers.set('Idempotency-Key', opts.idempotencyKey);
         if (this.beforeRequest) {
           await this.beforeRequest({ method, url, headers, body: opts.body });
@@ -150,7 +154,7 @@ export class HttpClient {
           method,
           headers,
           signal: controller.signal,
-          body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+          body: hasBody ? JSON.stringify(opts.body) : undefined,
         });
         const requestId = res.headers.get('Fluxomail-Request-Id') ?? undefined;
 
@@ -268,10 +272,11 @@ export class HttpClient {
           else opts.signal.addEventListener('abort', () => controller.abort(), { once: true });
         }
         const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? this.timeoutMs);
-        const headers = this.makeHeaders({ ...opts.headers });
+        const hasBody = opts.body !== undefined;
+        const headers = this.makeHeaders({ ...opts.headers }, hasBody);
         if (opts.idempotencyKey) headers.set('Idempotency-Key', opts.idempotencyKey);
         if (this.beforeRequest) await this.beforeRequest({ method, url, headers, body: opts.body });
-        const res = await this.fetchImpl(url, { method, headers, signal: controller.signal, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
+        const res = await this.fetchImpl(url, { method, headers, signal: controller.signal, body: hasBody ? JSON.stringify(opts.body) : undefined });
         const requestId = res.headers.get('Fluxomail-Request-Id') ?? undefined;
         const status = res.status;
         if (res.ok) {

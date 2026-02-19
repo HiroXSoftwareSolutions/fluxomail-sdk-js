@@ -120,19 +120,39 @@ async function main() {
 
   // Load config
   let cfg = {};
+  let cfgSource = 'none';
   const cfgPath = args.config ? String(args.config) : undefined;
   const cwdRc = path.join(process.cwd(), '.fluxomailrc');
   const homeRc = path.join(os.homedir(), '.fluxomailrc');
   const tryLoad = async (p) => { try { const t = await readFile(p, 'utf8'); return JSON.parse(t) } catch { return {} } };
-  if (cfgPath) cfg = await tryLoad(cfgPath);
-  else cfg = { ...(await tryLoad(cwdRc)), ...(await tryLoad(homeRc)) };
+  if (cfgPath) { cfg = await tryLoad(cfgPath); cfgSource = 'explicit'; }
+  else {
+    const homeCfg = await tryLoad(homeRc);
+    const cwdCfg = await tryLoad(cwdRc);
+    cfg = { ...homeCfg, ...cwdCfg };
+    if (Object.keys(cwdCfg).length > 0) cfgSource = 'cwd';
+    else if (Object.keys(homeCfg).length > 0) cfgSource = 'home';
+  }
 
   const apiKey = args['api-key'] || process.env.FLUXOMAIL_API_KEY || cfg.apiKey || '';
   const baseUrl = args.base || process.env.FLUXOMAIL_BASE_URL || cfg.base || undefined;
   const version = args.version || cfg.version || '2025-09-01';
 
   const { Fluxomail } = await loadSdk();
-  const tokenCmd = args['token-cmd'] ? String(args['token-cmd']) : (cfg['tokenCmd'] ? String(cfg['tokenCmd']) : undefined);
+  // tokenCmd from CLI flag is always trusted; from config file, only trust
+  // explicit --config or ~/.fluxomailrc — never a CWD-discovered .fluxomailrc
+  // (a malicious repo could plant one to execute arbitrary shell commands).
+  const tokenCmdFromFlag = args['token-cmd'] ? String(args['token-cmd']) : undefined;
+  const tokenCmdFromConfig = cfg['tokenCmd'] ? String(cfg['tokenCmd']) : undefined;
+  let tokenCmd;
+  if (tokenCmdFromFlag) {
+    tokenCmd = tokenCmdFromFlag;
+  } else if (tokenCmdFromConfig && cfgSource !== 'cwd') {
+    tokenCmd = tokenCmdFromConfig;
+  } else if (tokenCmdFromConfig && cfgSource === 'cwd') {
+    if (!args.quiet) console.error('Warning: ignoring tokenCmd from ./.fluxomailrc (untrusted). Use --config or ~/.fluxomailrc instead.');
+    tokenCmd = undefined;
+  }
   let initialToken = undefined;
   if (!apiKey && tokenCmd) {
     try { initialToken = await runTokenCmd(tokenCmd); } catch {}
@@ -299,10 +319,22 @@ async function main() {
   if (cmd === 'init' && sub === 'worker') {
     const target = args._[2] ? String(args._[2]) : 'examples/workers'
     const file = path.join(target, 'worker.js')
-    const srcUrl = new URL('../examples/workers/worker.js', import.meta.url)
-    const src = await readFile(srcUrl).catch(() => null)
+    const tmpl = `// Minimal Cloudflare Worker example for Fluxomail
+export default {
+  async fetch(request, env) {
+    const { Fluxomail } = await import('@fluxomail/sdk');
+    const fm = new Fluxomail({ apiKey: env.FLUXOMAIL_API_KEY });
+    const res = await fm.sends.send({
+      to: 'user@example.com',
+      subject: 'Hello from Worker',
+      html: '<h1>Hello!</h1>',
+    });
+    return Response.json(res);
+  },
+};
+`
     await mkdir(path.dirname(file), { recursive: true }).catch(() => {})
-    if (src) await writeFile(file, src, { flag: 'wx' }).catch(() => {})
+    await writeFile(file, tmpl, { flag: 'wx' }).catch(() => {})
     if (!args.quiet) console.log('Wrote worker example to', file)
     return
   }

@@ -8,7 +8,7 @@ Thanks for helping improve the Fluxomail SDK!
 
 ### Setup
 ```bash
-git clone https://github.com/fluxomail/fluxomail-sdk-js.git
+git clone https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js.git
 cd fluxomail-sdk-js
 npm install
 npm test
