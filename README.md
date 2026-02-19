@@ -1,6 +1,6 @@
 # Fluxomail SDK (JS/TS)
 
-![CI](https://github.com/fluxomail/fluxomail-sdk-js/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/actions/workflows/ci.yml/badge.svg)
 [![npm version](https://img.shields.io/npm/v/%40fluxomail%2Fsdk.svg)](https://www.npmjs.com/package/@fluxomail/sdk)
 
 Tiny, robust SDK for Fluxomail's REST + SSE APIs. Focused on minutes-to-first-value: send, list events, subscribe to realtime events, manage preferences, and get a send's timeline.

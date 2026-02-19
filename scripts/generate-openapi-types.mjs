@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, writeFile, stat } from 'node:fs/promises'
+import { mkdir, writeFile, stat, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 async function main() {
@@ -27,6 +27,15 @@ async function main() {
     } catch (e) {
       console.error('OpenAPI codegen failed:', e && e.message ? e.message : String(e))
     }
+  }
+
+  // No spec available — only write the stub if the file doesn't exist yet
+  // or already contains a stub. Never overwrite real generated types.
+  let existing = ''
+  try { existing = await readFile(outFile, 'utf8') } catch {}
+  if (existing && !existing.startsWith('// Auto-generated stub')) {
+    console.log('No OpenAPI spec found — keeping existing types at', outFile)
+    return
   }
 
   const stub = `// Auto-generated stub (no OpenAPI spec available)\n` +
