@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Fluxomail CLI: send, events list, events tail (SSE)
+// Fluxomail CLI: send, events list, events tail (SSE), preferences, timelines
 import process from 'node:process';
 import { readFile, writeFile, appendFile, mkdir } from 'node:fs/promises';
 import { exec } from 'node:child_process';
@@ -33,15 +33,18 @@ function usage() {
 fluxomail <command> [options]
 
 Commands:
-  send            Send an email
-  events list     List events (backfill)
-  events tail     Stream events (SSE)
-  events backfill Backfill events and persist checkpoint
-  timelines get   Get a send's timeline
-  whoami          Validate auth and show account info (basic)
-  init next       Scaffold Next.js token route example
-  init worker     Scaffold minimal Cloudflare Worker example
-  init next-app   Scaffold Next.js App Router token route
+  send              Send an email
+  send-global       Send via the global endpoint
+  events list       List events (backfill)
+  events tail       Stream events (SSE)
+  events backfill   Backfill events and persist checkpoint
+  timelines get     Get a send's timeline
+  preferences get   Get contact subscription preferences
+  preferences update  Update contact subscription preferences
+  whoami            Validate auth and show account info (basic)
+  init next         Scaffold Next.js token route example
+  init worker       Scaffold minimal Cloudflare Worker example
+  init next-app     Scaffold Next.js App Router token route
 
 Global options:
   --api-key <key>           API key (or env FLUXOMAIL_API_KEY)
@@ -62,28 +65,21 @@ Send options:
   --bcc <email[,email]>
   --attach <path[:mime][:name]>   (repeat to add multiple)
   --header <k:v>            Add custom message header (repeat)
+  --global                  Use the global send endpoint
 
-Events list options:
+Events list/tail/backfill options:
   --types <csv>             e.g., email.delivered,email.opened or email.*
   --limit <n>
   --since <ts|ISO>
   --cursor <cursor>
+  --smtp-code <code>        Filter by SMTP response code (e.g. 250, 550)
+  --mta-host <hostname>     Filter by remote MTA hostname
+  --domain <domain>         Filter by recipient domain (e.g. gmail.com)
   --format <json|jsonl|pretty>
   --output <file>
 
-Events tail options:
-  --types <csv>
-  --since <ts|ISO>
-  --format <json|jsonl>
-  --output <file>
-
-Events backfill options:
-  --types <csv>
-  --limit <n>
-  --since <eventId|ISO>     start position; overrides checkpoint
+Events backfill extra options:
   --checkpoint-file <path>  file to persist last event id
-  --format <json|jsonl>
-  --output <file>
   --max-pages <n>
 
 Timelines get options:
@@ -92,6 +88,16 @@ Timelines get options:
   --cursor <cursor>
   --format <json|pretty>
   --output <file>
+
+Preferences get options:
+  --token <token>           Unsubscribe token for contact identification
+  --email <email>           Contact email (alternative to --token)
+
+Preferences update options:
+  --token <token>           Unsubscribe token for contact identification
+  --email <email>           Contact email (alternative to --token)
+  --subscribe <key>         Subscribe to category (repeatable)
+  --unsubscribe <key>       Unsubscribe from category (repeatable)
 `);
 }
 
@@ -133,7 +139,14 @@ async function main() {
   }
   const fm = new Fluxomail({ apiKey, baseUrl, version, token: initialToken, getToken: tokenCmd ? () => runTokenCmd(tokenCmd) : undefined });
 
-  if (cmd === 'send') {
+  // Helper: parse event filter flags
+  const eventFilters = () => ({
+    smtpCode: args['smtp-code'] ? String(args['smtp-code']) : undefined,
+    mtaHost: args['mta-host'] ? String(args['mta-host']) : undefined,
+    domain: args.domain ? String(args.domain) : undefined,
+  });
+
+  if (cmd === 'send' || cmd === 'send-global') {
     const to = String(args.to || '');
     const subject = String(args.subject || '');
     const text = args.text ? String(args.text) : undefined;
@@ -165,7 +178,9 @@ async function main() {
       const i = s.indexOf(':');
       if (i > 0) headers[s.slice(0, i).trim()] = s.slice(i + 1).trim();
     }
-    const res = await fm.sends.send({ to: toList, from: args.from, subject, text, html, cc, bcc, headers: Object.keys(headers).length ? headers : undefined, attachments: attachments.length ? attachments : undefined, idempotencyKey: idemp });
+    const sendReq = { to: toList, from: args.from, subject, text, html, cc, bcc, headers: Object.keys(headers).length ? headers : undefined, attachments: attachments.length ? attachments : undefined, idempotencyKey: idemp };
+    const useGlobal = cmd === 'send-global' || args.global === true;
+    const res = useGlobal ? await fm.sends.sendGlobal(sendReq) : await fm.sends.send(sendReq);
     console.log(JSON.stringify(res, null, 2));
     return;
   }
@@ -178,7 +193,7 @@ async function main() {
     const cursor = args.cursor ? String(args.cursor) : undefined;
     const format = (args.format ? String(args.format) : 'pretty').toLowerCase();
     const outPath = args.output ? String(args.output) : undefined;
-    const res = await fm.events.list({ types, limit, since, cursor });
+    const res = await fm.events.list({ types, limit, since, cursor, ...eventFilters() });
     if (format === 'jsonl') {
       const lines = (res.events || []).map((e) => JSON.stringify(e)).join('\n') + '\n';
       if (!args.quiet) process.stdout.write(lines);
@@ -197,7 +212,7 @@ async function main() {
     const since = args.since ? String(args.since) : undefined;
     const format = (args.format ? String(args.format) : 'jsonl').toLowerCase();
     const outPath = args.output ? String(args.output) : undefined;
-    const subsc = fm.events.subscribe({ types, since }, async (evt) => {
+    const subsc = fm.events.subscribe({ types, since, ...eventFilters() }, async (evt) => {
       const line = format === 'json' ? JSON.stringify({ events: [evt] }) : JSON.stringify(evt);
       if (!args.quiet) console.log(line);
       if (outPath) { try { await appendFile(outPath, line + '\n'); } catch {} }
@@ -222,13 +237,40 @@ async function main() {
     const outPath = args.output ? String(args.output) : undefined;
     let lastId = since;
     const maxPages = args['max-pages'] ? Number(args['max-pages']) : undefined;
-    for await (const evt of fm.events.iterate({ types, limit, since, signal: abort.signal, maxPages })) {
+    for await (const evt of fm.events.iterate({ types, limit, since, signal: abort.signal, maxPages, ...eventFilters() })) {
       lastId = evt.id;
       const line = format === 'json' ? JSON.stringify({ events: [evt] }) : JSON.stringify(evt);
       if (!args.quiet) console.log(line);
       if (outPath) { try { await appendFile(outPath, line + '\n'); } catch {} }
       if (ckptFile && lastId) { try { await writeFile(ckptFile, lastId, 'utf8'); } catch {} }
     }
+    return;
+  }
+
+  if (cmd === 'preferences' && sub === 'get') {
+    if (!apiKey && !tokenCmd && !initialToken) { console.error('Missing auth: provide --api-key or --token-cmd'); process.exit(2); }
+    const token = args.token ? String(args.token) : undefined;
+    const email = args.email ? String(args.email) : undefined;
+    if (!token && !email) { console.error('preferences get requires --token or --email'); process.exit(2); }
+    const res = await fm.preferences.get({ token, email });
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (cmd === 'preferences' && sub === 'update') {
+    if (!apiKey && !tokenCmd && !initialToken) { console.error('Missing auth: provide --api-key or --token-cmd'); process.exit(2); }
+    const token = args.token ? String(args.token) : undefined;
+    const email = args.email ? String(args.email) : undefined;
+    if (!token && !email) { console.error('preferences update requires --token or --email'); process.exit(2); }
+    const subKeys = args.subscribe ? (Array.isArray(args.subscribe) ? args.subscribe : [args.subscribe]) : [];
+    const unsubKeys = args.unsubscribe ? (Array.isArray(args.unsubscribe) ? args.unsubscribe : [args.unsubscribe]) : [];
+    if (subKeys.length === 0 && unsubKeys.length === 0) { console.error('preferences update requires at least one --subscribe or --unsubscribe'); process.exit(2); }
+    const subscriptions = [
+      ...subKeys.map(k => ({ categoryKey: String(k), subscribed: true })),
+      ...unsubKeys.map(k => ({ categoryKey: String(k), subscribed: false })),
+    ];
+    const res = await fm.preferences.update({ token, email, subscriptions });
+    console.log(JSON.stringify(res, null, 2));
     return;
   }
 

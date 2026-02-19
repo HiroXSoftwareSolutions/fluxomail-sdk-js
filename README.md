@@ -1,9 +1,9 @@
 # Fluxomail SDK (JS/TS)
 
-![CI](https://github.com/fluxomail/fluxomail-sdk-js/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/actions/workflows/ci.yml/badge.svg)
 [![npm version](https://img.shields.io/npm/v/%40fluxomail%2Fsdk.svg)](https://www.npmjs.com/package/@fluxomail/sdk)
 
-Tiny, robust SDK for Fluxomail’s REST + SSE APIs. Focused on minutes-to-first-value: send, list events, subscribe to realtime events, and get a send’s timeline.
+Tiny, robust SDK for Fluxomail's REST + SSE APIs. Focused on minutes-to-first-value: send, list events, subscribe to realtime events, manage preferences, and get a send's timeline.
 
 - ESM + TypeScript typings
 - Typed errors and request IDs for supportability
@@ -22,7 +22,6 @@ npm install @fluxomail/sdk
 
 ```ts
 import { Fluxomail } from '@fluxomail/sdk'
-import fs from 'node:fs/promises'
 
 const fm = new Fluxomail({
   apiKey: process.env.FLUXOMAIL_API_KEY, // Node only; do not expose in browser
@@ -36,7 +35,6 @@ await fm.sends.send({
   subject: 'Hello',
   html: '<h1>Hi!</h1>',
   idempotencyKey: 'req-123',
-  // Optional:
   cc: ['c1@example.com'],
   bcc: 'b1@example.com',
   attachments: [
@@ -44,19 +42,28 @@ await fm.sends.send({
   ]
 })
 
+// Send via the global endpoint (simpler, org-level)
+await fm.sends.sendGlobal({
+  to: 'user@example.com',
+  subject: 'Hello',
+  content: 'Hello from global endpoint',
+})
+
 // Backfill events (iterator auto-pages; respects Retry-After)
 for await (const evt of fm.events.iterate({ types: ['email.delivered'], limit: 100 })) {
   console.log('event', evt)
 }
 
-// Or single page
+// Or single page with optional filters
 const { events, nextCursor } = await fm.events.list({
   types: ['email.delivered'],
   limit: 100,
+  domain: 'gmail.com',       // filter by recipient domain
+  smtpCode: '250',           // filter by SMTP response code
+  mtaHost: 'mx.google.com',  // filter by remote MTA hostname
 })
 
 // Realtime events (works in Node and browser)
-// In browsers, provide getToken() to refresh a short‑lived token and checkpoint to resume
 const sub = fm.events.subscribe({
   types: ['email.*'],
   getToken: () => fetch('/api/fluxomail/token', { method: 'POST', body: JSON.stringify({ organizationId }) }).then(r => r.json()).then(x => x.token),
@@ -71,10 +78,10 @@ const sub = fm.events.subscribe({
 // Later
 sub.close()
 
-// Get a send’s timeline
+// Get a send's timeline
 const t = await fm.timelines.get({ sendId: 'send_abc123' })
 
-// Iterate a send’s timeline (auto-paging)
+// Iterate a send's timeline (auto-paging)
 for await (const tev of fm.timelines.iterate({ sendId: 'send_abc123', limit: 100 })) {
   console.log('timeline', tev)
 }
@@ -90,32 +97,57 @@ fm.events.subscribe({ types: ['email.delivered', 'email.opened'] }, (evt) => {
 })
 ```
 
+## Preferences
+
+Manage contact subscription preferences via the v1 Preferences API.
+
+```ts
+// Get a contact's preferences (by unsubscribe token or email)
+const prefs = await fm.preferences.get({ token: 'unsub_token_abc' })
+// or: await fm.preferences.get({ email: 'user@example.com' })
+
+console.log(prefs.contact)       // { id, email }
+console.log(prefs.categories)    // [{ key, name, description }]
+console.log(prefs.subscriptions) // [{ categoryKey, subscribed }]
+
+// Update subscriptions
+await fm.preferences.update({
+  email: 'user@example.com',
+  subscriptions: [
+    { categoryKey: 'marketing', subscribed: false },
+    { categoryKey: 'transactional', subscribed: true },
+  ],
+})
+```
+
 ## CLI
 
-Install globally or run one‑shot with npx/pnpm/bun:
+Install globally or run one-shot with npx/pnpm/bun:
 
 ```bash
 # Global
 npm i -g @fluxomail/sdk
 fluxomail --help
 
-# One‑shot
+# One-shot
 npx -y @fluxomail/sdk fluxomail --help
-pnpm dlx @fluxomail/sdk fluxomail --help
-bunx @fluxomail/sdk fluxomail --help
 
 # Examples
 fluxomail send --api-key $FLUXOMAIL_API_KEY --to user@example.com --subject "Hi" --text "Hello"
+fluxomail send-global --api-key $FLUXOMAIL_API_KEY --to user@example.com --subject "Hi" --text "Hello"
 fluxomail events list --api-key $FLUXOMAIL_API_KEY --types email.delivered --limit 50
+fluxomail events list --api-key $FLUXOMAIL_API_KEY --types email.delivered --domain gmail.com --smtp-code 250
 fluxomail events tail --api-key $FLUXOMAIL_API_KEY --types email.*
 fluxomail events backfill --api-key $FLUXOMAIL_API_KEY --types email.* --checkpoint-file .fluxomail.ckpt
 fluxomail timelines get --api-key $FLUXOMAIL_API_KEY --send-id send_abc123 --limit 100
+fluxomail preferences get --api-key $FLUXOMAIL_API_KEY --email user@example.com
+fluxomail preferences update --api-key $FLUXOMAIL_API_KEY --email user@example.com --unsubscribe marketing
 fluxomail whoami --api-key $FLUXOMAIL_API_KEY
 
 # Init scaffolds
 fluxomail init next ./      # writes pages/api/fluxomail/token.ts (creates dirs)
-fluxomail init worker ./  # writes examples/workers/worker.js
-fluxomail init next-app ./ # writes app/api/fluxomail/token/route.ts (creates dirs)
+fluxomail init worker ./    # writes examples/workers/worker.js
+fluxomail init next-app ./  # writes app/api/fluxomail/token/route.ts (creates dirs)
 ```
 
 ## Configuration
@@ -152,17 +184,37 @@ const sub = fm.events.subscribe({
 }, (evt) => { /* ... */ })
 ```
 
+## Event Filters
+
+Filter events by SMTP code, remote MTA hostname, or recipient domain in list, iterate, subscribe, and tail:
+
+```ts
+// SDK
+const { events } = await fm.events.list({
+  types: ['email.delivered'],
+  smtpCode: '250',
+  mtaHost: 'mx.google.com',
+  domain: 'gmail.com',
+})
+
+// CLI
+fluxomail events list --types email.delivered --smtp-code 250 --mta-host mx.google.com --domain gmail.com
+```
+
 ## Error Handling
 
 All errors extend `FluxomailError` and include `code`, `status`, and optional `requestId`.
 
 ```ts
-import { FluxomailError, RateLimitError } from '@fluxomail/sdk'
+import { FluxomailError, RateLimitError, PaymentRequiredError } from '@fluxomail/sdk'
 
 try {
   await fm.events.list({ limit: 10 })
 } catch (err) {
-  if (err instanceof RateLimitError) {
+  if (err instanceof PaymentRequiredError) {
+    // Feature not enabled — check err.preview for upgrade info
+    console.log('Upgrade required:', err.preview)
+  } else if (err instanceof RateLimitError) {
     // retry later
   } else if (err instanceof FluxomailError) {
     console.error('request failed', err.code, err.status, err.requestId)
@@ -188,41 +240,6 @@ await fm.events.list({ limit: 1, retry: { maxAttempts: 5, baseDelayMs: 100 }, ti
 
 - `attachments[].content` accepts `string`, `Uint8Array`, or `Blob | File`.
 - The SDK handles base64 conversion for you. Provide `contentType` for best results.
-
-## Development
-
-- Build: `npm run build`
-- Test: `npm test`
-- E2E smoke (requires staging env vars): `npm run smoke:e2e`
-
-## Examples
-
-- Node quickstart: `examples/node/quickstart.mjs`
-- Next.js browser token + SSE: `examples/next/`
-
-## Templates
-
-Basic helpers for managing and rendering templates.
-
-```ts
-// Create
-const t = await fm.templates.create({ name: 'Welcome', subject: 'Hi {{name}}', htmlContent: '<h1>Hi {{name}}</h1>' })
-
-// Update
-await fm.templates.update(t.id, { subject: 'Hello {{name}}' })
-
-// Get
-const latest = await fm.templates.get(t.id)
-
-// List
-const list = await fm.templates.list({ limit: 10 })
-
-// Render (server-side)
-const rendered = await fm.templates.render(t.id, { variables: { name: 'Pat' } })
-
-// Delete
-await fm.templates.delete(t.id)
-```
 
 ## Webhooks (Node)
 
@@ -254,10 +271,10 @@ Centralize default CLI settings in a JSON file. The CLI reads config in this pre
 - `~/.fluxomailrc`
 
 Supported keys:
-- `apiKey`: string — default API key (equivalent to `--api-key`)
-- `base`: string — API base URL (equivalent to `--base`)
-- `version`: string — API version header (equivalent to `--version`)
-- `tokenCmd`: string — shell command that prints a short-lived token (equivalent to `--token-cmd`)
+- `apiKey`: string -- default API key (equivalent to `--api-key`)
+- `base`: string -- API base URL (equivalent to `--base`)
+- `version`: string -- API version header (equivalent to `--version`)
+- `tokenCmd`: string -- shell command that prints a short-lived token (equivalent to `--token-cmd`)
 
 Example `.fluxomailrc`:
 
@@ -272,22 +289,16 @@ Example `.fluxomailrc`:
 
 Tip: You can keep API keys out of the file and rely on environment variables or just set `tokenCmd` for browser-like flows.
 
-## Support Matrix
+## Development
 
-- Node >= 18
-- Evergreen browsers (last two major versions)
+- Build: `npm run build`
+- Test: `npm test`
+- E2E smoke (requires staging env vars): `npm run smoke:e2e`
 
-## License
+## Examples
 
-Apache-2.0
-
-## Contributing
-
-We welcome contributions! Please see `CONTRIBUTING.md` for local setup, testing, and commit message guidelines (Conventional Commits).
-
-## Code of Conduct
-
-This project follows the Contributor Covenant. By participating, you agree to uphold our `CODE_OF_CONDUCT.md`. For issues, email support@fluxomail.com.
+- Node quickstart: `examples/node/quickstart.mjs`
+- Next.js browser token + SSE: `examples/next/`
 
 ## Response Metadata
 
@@ -305,3 +316,20 @@ console.log(meta.requestId, meta.status)
 ```ts
 const fm = new Fluxomail({ apiKey, retry: { maxAttempts: 5, retriableStatuses: [408, 429], baseDelayMs: 200, maxDelayMs: 1500 } })
 ```
+
+## Support Matrix
+
+- Node >= 18
+- Evergreen browsers (last two major versions)
+
+## License
+
+Apache-2.0
+
+## Contributing
+
+We welcome contributions! Please see `CONTRIBUTING.md` for local setup, testing, and commit message guidelines (Conventional Commits).
+
+## Code of Conduct
+
+This project follows the Contributor Covenant. By participating, you agree to uphold our `CODE_OF_CONDUCT.md`. For issues, email support@fluxomail.com.

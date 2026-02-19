@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project uses SemVer. During 0.x, breaking changes may occur in minor versions.
 
+## 0.5.0 - 2026-02-19
+- **Breaking**: remove Templates API (no backend implementation)
+- feat: `sends.sendGlobal()` — send via the org-level global endpoint
+- feat: `preferences.get()` / `preferences.update()` — manage contact preferences
+- feat: `events.list({ types })` — filter events by type
+- feat: `events.subscribe({ types })` — filter SSE stream by event type
+- feat: `PaymentRequiredError` (HTTP 402) for quota enforcement
+- fix: codegen script preserves committed types when no OpenAPI spec is available
+
 ## 0.4.4 - 2025-09-20
 - feat: expose audience module via SDK index export
 

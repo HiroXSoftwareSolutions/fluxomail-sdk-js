@@ -9,6 +9,10 @@ import type {
   SendEmailResponse,
   GetTimelineOptions,
   GetTimelineResponse,
+  GetPreferencesOptions,
+  GetPreferencesResponse,
+  UpdatePreferencesRequest,
+  UpdatePreferencesResponse,
   EmailEventType,
   EmailEventEnvelope,
 } from './core/types.js';
@@ -17,10 +21,10 @@ import { HttpClient } from './core/http.js';
 import { listEvents, listEventsWithMeta } from './events/list.js';
 import { subscribe } from './events/stream.js';
 import { iterateEvents } from './events/iterate.js';
-import { sendEmail, sendEmailWithMeta } from './sends/send.js';
+import { sendEmail, sendEmailGlobal, sendEmailWithMeta } from './sends/send.js';
 import { getTimeline, getTimelineWithMeta } from './timelines/get.js';
 import { iterateTimeline } from './timelines/iterate.js';
-import { createTemplate, getTemplate, listTemplates, updateTemplate, deleteTemplate, renderTemplate } from './templates/index.js';
+import { getPreferences, updatePreferences } from './preferences/index.js';
 export * as webhooks from './webhooks/index.js';
 export * as audience from './audience/index.js';
 
@@ -53,6 +57,8 @@ export class Fluxomail {
     return {
       send: (req: SendEmailRequest): Promise<SendEmailResponse> => sendEmail(client, req),
       sendWithMeta: (req: SendEmailRequest) => sendEmailWithMeta(client, req),
+      /** Send via the global endpoint (POST /emails/send-global). */
+      sendGlobal: (req: SendEmailRequest): Promise<SendEmailResponse> => sendEmailGlobal(client, req),
     } as const;
   }
 
@@ -65,15 +71,11 @@ export class Fluxomail {
     } as const;
   }
 
-  get templates() {
+  get preferences() {
     const client = this.client;
     return {
-      create: (req: import('./core/types.js').CreateTemplateRequest) => createTemplate(client, req),
-      get: (id: string, opts: { signal?: AbortSignal; timeoutMs?: number } = {}) => getTemplate(client, id, opts),
-      list: (opts: import('./core/types.js').ListTemplatesOptions = {}) => listTemplates(client, opts),
-      update: (id: string, req: import('./core/types.js').UpdateTemplateRequest) => updateTemplate(client, id, req),
-      delete: (id: string, opts: { signal?: AbortSignal; timeoutMs?: number } = {}) => deleteTemplate(client, id, opts),
-      render: (id: string, req: import('./core/types.js').RenderTemplateRequest) => renderTemplate(client, id, req),
+      get: (opts: GetPreferencesOptions = {}): Promise<GetPreferencesResponse> => getPreferences(client, opts),
+      update: (req: UpdatePreferencesRequest): Promise<UpdatePreferencesResponse> => updatePreferences(client, req),
     } as const;
   }
 }

@@ -95,6 +95,36 @@ export async function sendEmail(client: HttpClient, req: SendEmailRequest): Prom
   throw lastErr instanceof Error ? lastErr : new Error('send failed');
 }
 
+/**
+ * Send an email via the global endpoint (POST /emails/send-global).
+ * This uses the org-level configuration without per-send tracking overhead.
+ */
+export async function sendEmailGlobal(client: HttpClient, req: SendEmailRequest): Promise<SendEmailResponse> {
+  const { idempotencyKey, idempotentRetry } = req;
+  const payload = await buildBody(req);
+  const attempts = Math.max(1, Number(idempotentRetry || 1));
+  let lastErr: unknown = undefined;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const r = await client.request<SendEmailResponse>('POST', '/emails/send-global', { body: payload as any, idempotencyKey, signal: req.signal, timeoutMs: req.timeoutMs });
+      return r;
+    } catch (e: any) {
+      lastErr = e;
+      const status = e?.status as number | undefined;
+      const code = (e?.code as string | undefined)?.toLowerCase?.() || '';
+      const retriable = (status !== undefined && (status >= 500 || status === 429)) || code.includes('network') || code.includes('timeout');
+      const hasIdem = !!idempotencyKey;
+      if (i < attempts - 1 && hasIdem && retriable) {
+        const wait = Math.min(2000, 100 * Math.pow(2, i)) + Math.floor(Math.random() * 50);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('send failed');
+}
+
 export async function sendEmailWithMeta(client: HttpClient, req: SendEmailRequest): Promise<{ data: SendEmailResponse; meta: { status: number; headers: Headers; requestId?: string } }> {
   const { idempotencyKey } = req;
   const payload = await buildBody(req);
