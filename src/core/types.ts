@@ -32,6 +32,12 @@ export interface ListEventsOptions {
   cursor?: string;
   limit?: number;
   since?: string; // ISO timestamp or event id, depending on API contract
+  /** Filter by SMTP response code (e.g. "250", "550") */
+  smtpCode?: string;
+  /** Filter by remote MTA hostname */
+  mtaHost?: string;
+  /** Filter by recipient domain (e.g. "gmail.com") */
+  domain?: string;
   signal?: AbortSignal;
   timeoutMs?: number;
   retry?: RetryPolicy;
@@ -45,6 +51,12 @@ export interface ListEventsResponse<T = unknown> {
 export interface SubscribeOptions {
   types?: string[];
   since?: string;
+  /** Filter by SMTP response code (e.g. "250", "550") */
+  smtpCode?: string;
+  /** Filter by remote MTA hostname */
+  mtaHost?: string;
+  /** Filter by recipient domain (e.g. "gmail.com") */
+  domain?: string;
   signal?: AbortSignal;
   getToken?: () => string | undefined | Promise<string | undefined>;
   checkpoint?: {
@@ -90,9 +102,11 @@ export interface SendEmailRequest {
   idempotentRetry?: number; // max attempts if idempotencyKey present (>=1)
   signal?: AbortSignal;
   timeoutMs?: number;
-  // templates & personalization (if supported by backend)
+  /** @deprecated Templates API is not yet available. This field is reserved for future use. */
   templateId?: string;
+  /** @deprecated Template variables are not yet available. This field is reserved for future use. */
   variables?: Record<string, Json>;
+  /** @deprecated Personalizations are not yet available. This field is reserved for future use. */
   personalizations?: Array<{
     to: string | string[];
     cc?: string | string[];
@@ -137,7 +151,51 @@ export interface RetryPolicy {
   maxDelayMs?: number; // default 2000ms
 }
 
-// Templates
+// Preferences
+export interface GetPreferencesOptions {
+  /** Unsubscribe token for contact identification */
+  token?: string;
+  /** Contact email for identification (alternative to token) */
+  email?: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export interface PreferencesCategory {
+  key: string;
+  name?: string;
+  description?: string;
+  [k: string]: unknown;
+}
+
+export interface PreferencesSubscription {
+  categoryKey: string;
+  subscribed: boolean;
+  [k: string]: unknown;
+}
+
+export interface GetPreferencesResponse {
+  contact: { id: string; email: string };
+  categories: PreferencesCategory[];
+  subscriptions: PreferencesSubscription[];
+}
+
+export interface UpdatePreferencesRequest {
+  /** Unsubscribe token for contact identification */
+  token?: string;
+  /** Contact email for identification (alternative to token) */
+  email?: string;
+  subscriptions: Array<{ categoryKey: string; subscribed: boolean }>;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export interface UpdatePreferencesResponse {
+  ok: true;
+}
+
+// Templates (deprecated — no backend implementation exists)
+/** @deprecated Templates API is not yet available. */
 export interface Template {
   id: string;
   name?: string;
@@ -149,6 +207,7 @@ export interface Template {
   [k: string]: unknown;
 }
 
+/** @deprecated Templates API is not yet available. */
 export interface CreateTemplateRequest {
   name: string;
   subject?: string;
@@ -156,6 +215,7 @@ export interface CreateTemplateRequest {
   content?: string;
 }
 
+/** @deprecated Templates API is not yet available. */
 export interface UpdateTemplateRequest {
   name?: string;
   subject?: string;
@@ -163,10 +223,12 @@ export interface UpdateTemplateRequest {
   content?: string;
 }
 
+/** @deprecated Templates API is not yet available. */
 export interface RenderTemplateRequest {
   variables?: Record<string, Json>;
 }
 
+/** @deprecated Templates API is not yet available. */
 export interface RenderTemplateResponse {
   subject?: string;
   html?: string;
@@ -174,6 +236,7 @@ export interface RenderTemplateResponse {
   [k: string]: unknown;
 }
 
+/** @deprecated Templates API is not yet available. */
 export interface ListTemplatesOptions {
   cursor?: string;
   limit?: number;
@@ -182,6 +245,7 @@ export interface ListTemplatesOptions {
   retry?: RetryPolicy;
 }
 
+/** @deprecated Templates API is not yet available. */
 export interface ListTemplatesResponse {
   templates: Template[];
   nextCursor?: string | null;

@@ -44,6 +44,15 @@ export class RateLimitError extends FluxomailError {
   }
 }
 
+export class PaymentRequiredError extends FluxomailError {
+  readonly preview?: unknown;
+  constructor(message = 'Payment required', options: { requestId?: string; preview?: unknown } = {}) {
+    super(message, { code: 'plan_required', status: 402, requestId: options.requestId });
+    this.name = 'PaymentRequiredError';
+    this.preview = options.preview;
+  }
+}
+
 export class ValidationError extends FluxomailError {
   constructor(message = 'Validation error', options: { requestId?: string; details?: unknown } = {}) {
     super(message, { code: 'validation_error', status: 422, requestId: options.requestId, details: options.details });
@@ -72,6 +81,7 @@ export function classifyHttpError(status: number, body: unknown, requestId?: str
   const message = (asObj?.message as string | undefined) ?? undefined;
 
   if (status === 401) return new AuthError(message ?? 'Authentication failed', { requestId });
+  if (status === 402) return new PaymentRequiredError(message ?? 'Payment required', { requestId, preview: asObj?.preview });
   if (status === 403) return new PermissionDeniedError(message ?? 'Permission denied', { requestId });
   if (status === 404) return new NotFoundError(message ?? 'Not found', { requestId });
   if (status === 422) return new ValidationError(message ?? 'Validation error', { requestId, details: asObj?.details });

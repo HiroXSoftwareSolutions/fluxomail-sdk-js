@@ -32,6 +32,9 @@ export function subscribe<T = unknown>(client: HttpClient, opts: SubscribeOption
     const url = new URL(client.base() + '/events/stream');
     if (opts.types) for (const t of opts.types) url.searchParams.append('types', t);
     if (latestSince) url.searchParams.set('since', latestSince);
+    if (opts.smtpCode) url.searchParams.set('smtpCode', opts.smtpCode);
+    if (opts.mtaHost) url.searchParams.set('mtaHost', opts.mtaHost);
+    if (opts.domain) url.searchParams.set('domain', opts.domain);
     let token = client.tokenParam();
     if (opts.getToken) {
       try { token = (await opts.getToken()) || token; } catch {}

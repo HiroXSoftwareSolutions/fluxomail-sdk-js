@@ -8,6 +8,9 @@ export async function listEvents<T = unknown>(client: HttpClient, opts: ListEven
     limit: opts.limit,
     since: opts.since,
     types: opts.types,
+    smtpCode: opts.smtpCode,
+    mtaHost: opts.mtaHost,
+    domain: opts.domain,
   };
   const resp = await client.request<OpenAPIListEventsResponse>('GET', '/events', { query, signal: opts.signal, timeoutMs: opts.timeoutMs, retry: opts.retry });
   // Map OpenAPI response to public SDK shape (structurally identical)
@@ -21,6 +24,9 @@ export async function listEventsWithMeta<T = unknown>(client: HttpClient, opts: 
     limit: opts.limit,
     since: opts.since,
     types: opts.types,
+    smtpCode: opts.smtpCode,
+    mtaHost: opts.mtaHost,
+    domain: opts.domain,
   };
   const out = await client.requestWithMeta<OpenAPIListEventsResponse>('GET', '/events', { query, signal: opts.signal, timeoutMs: opts.timeoutMs, retry: opts.retry });
   return { data: asOpenAPIListEvents(out.data) as unknown as ListEventsResponse<T>, meta: out.meta };

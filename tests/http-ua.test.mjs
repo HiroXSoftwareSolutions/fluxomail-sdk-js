@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Fluxomail } from '../dist/index.js';
 import { startTestServer } from './helpers/server.mjs';
-import pkg from '../package.json' assert { type: 'json' };
+import { readFileSync } from 'node:fs';
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('User-Agent includes dynamic SDK version', async () => {
   let ua = '';
