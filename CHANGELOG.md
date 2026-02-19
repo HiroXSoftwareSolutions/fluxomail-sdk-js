@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project uses SemVer. During 0.x, breaking changes may occur in minor versions.
 
+## 0.5.1 - 2026-02-19
+- security: CLI ignores `tokenCmd` from CWD-discovered `.fluxomailrc` (prevents
+  untrusted repos from executing arbitrary shell commands via planted config)
+- fix: only set `Content-Type: application/json` on requests with a body,
+  avoiding unnecessary CORS preflights on GET requests in browsers
+- fix: `init worker` now uses an inlined template instead of reading a file
+  not included in the published package
+- fix: CONTRIBUTING.md clone URL now points to correct GitHub org
+
 ## 0.5.0 - 2026-02-19
 - **Breaking**: remove Templates API (no backend implementation)
 - feat: `sends.sendGlobal()` — send via the org-level global endpoint

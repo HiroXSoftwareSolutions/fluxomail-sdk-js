@@ -39,7 +39,7 @@ test('CLI init worker writes example file and creates dirs', async () => {
     const file = path.join(dir, 'worker.js')
     assert.equal(await exists(file), true)
     const text = await readFile(file, 'utf8')
-    assert.ok(text.includes('Fluxomail API'))
+    assert.ok(text.includes('@fluxomail/sdk'))
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 
