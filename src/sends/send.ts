@@ -34,14 +34,21 @@ async function toBase64(content: string | Uint8Array | Blob): Promise<string> {
 }
 
 async function buildBody(req: SendEmailRequest): Promise<Record<string, unknown>> {
-  const to = req.to;
+  const to = Array.isArray(req.to) ? req.to.map((v) => String(v).trim()).filter(Boolean) : String(req.to).trim();
+  if (Array.isArray(to) && to.length !== 1) {
+    throw new Error('Fluxomail send endpoints currently require exactly one recipient');
+  }
+  const toValue = Array.isArray(to) ? to[0] : to;
+  if (!toValue) {
+    throw new Error('Fluxomail send endpoints require a recipient');
+  }
   const subject = req.subject;
   const content = req.content ?? req.text;
   const htmlContent = req.htmlContent ?? req.html;
   const fromEmail = req.fromEmail ?? (req.from ? String(req.from).match(/<([^>]+)>/)?.[1] || undefined : undefined);
   const fromName = req.fromName ?? (req.from ? String(req.from).replace(/<[^>]+>/, '').trim() || undefined : undefined);
   const body: Record<string, unknown> = {
-    to,
+    to: toValue,
     subject,
     ...(content ? { content } : {}),
     ...(htmlContent ? { htmlContent } : {}),

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { mkdir, writeFile, stat, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 async function main() {
   const root = new URL('..', import.meta.url).pathname
@@ -8,20 +9,26 @@ async function main() {
   const outFile = path.join(outDir, 'openapi-types.ts')
   await mkdir(outDir, { recursive: true })
   let openapiTS
+  let openapiMod
   try {
-    const mod = await import('openapi-typescript')
-    openapiTS = mod && (mod.default || mod)
+    openapiMod = await import('openapi-typescript')
+    openapiTS = openapiMod && (openapiMod.default || openapiMod)
   } catch {}
   const envSpec = process.env.FLUXOMAIL_OPENAPI
-  const fallbackSpec = path.join(root, '..', 'email-service', 'openapi', '2025-09-01.yaml')
+  const fallbackSpec = path.join(root, '..', 'openapi', '2025-09-01.yaml')
   let spec = envSpec && envSpec.trim() ? envSpec.trim() : ''
   if (!spec) {
     try { await stat(fallbackSpec); spec = fallbackSpec } catch {}
   }
   if (openapiTS && spec) {
     try {
-      const types = await openapiTS(spec, { httpHeaders: true })
-      await writeFile(outFile, String(types))
+      const specInput = /^https?:\/\//i.test(spec) ? spec : pathToFileURL(spec)
+      const generated = await openapiTS(specInput, { httpHeaders: true })
+      const types =
+        typeof generated === 'string'
+          ? generated
+          : (typeof openapiMod?.astToString === 'function' ? openapiMod.astToString(generated) : String(generated))
+      await writeFile(outFile, types)
       console.log('Generated types to', outFile)
       return
     } catch (e) {

@@ -58,3 +58,21 @@ test('sends.send retries on 500 when idempotencyKey and idempotentRetry set', as
     assert.equal(attempts, 2);
   } finally { await server.close(); }
 });
+
+test('sends.send rejects multiple recipients in a single request', async () => {
+  const server = await startTestServer({
+    'POST /emails/send': async (_req, res, _url) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ sendId: 'unexpected' }));
+    }
+  });
+  try {
+    const fm = new Fluxomail({ apiKey: 'k', baseUrl: server.url });
+    await assert.rejects(
+      () => fm.sends.send({ to: ['a@example.com', 'b@example.com'], subject: 'Hi', content: 'T' }),
+      /exactly one recipient/
+    );
+  } finally {
+    await server.close();
+  }
+});

@@ -2,6 +2,8 @@ import type {
   ClientConfig,
   ListEventsOptions,
   ListEventsResponse,
+  GetMetricsOptions,
+  MetricsResponse,
   SubscribeOptions,
   EventHandler,
   Subscription,
@@ -13,6 +15,8 @@ import type {
   GetPreferencesResponse,
   UpdatePreferencesRequest,
   UpdatePreferencesResponse,
+  SyncContactsRequest,
+  SyncContactsResponse,
   EmailEventType,
   EmailEventEnvelope,
 } from './core/types.js';
@@ -21,10 +25,12 @@ import { HttpClient } from './core/http.js';
 import { listEvents, listEventsWithMeta } from './events/list.js';
 import { subscribe } from './events/stream.js';
 import { iterateEvents } from './events/iterate.js';
+import { getMetrics } from './metrics/get.js';
 import { sendEmail, sendEmailGlobal, sendEmailWithMeta } from './sends/send.js';
 import { getTimeline, getTimelineWithMeta } from './timelines/get.js';
 import { iterateTimeline } from './timelines/iterate.js';
 import { getPreferences, updatePreferences } from './preferences/index.js';
+import { syncContacts } from './contacts/index.js';
 export * as webhooks from './webhooks/index.js';
 export * as audience from './audience/index.js';
 
@@ -52,6 +58,13 @@ export class Fluxomail {
     } as const;
   }
 
+  get metrics() {
+    const client = this.client;
+    return {
+      get: (opts: GetMetricsOptions = {}): Promise<MetricsResponse> => getMetrics(client, opts),
+    } as const;
+  }
+
   get sends() {
     const client = this.client;
     return {
@@ -76,6 +89,13 @@ export class Fluxomail {
     return {
       get: (opts: GetPreferencesOptions = {}): Promise<GetPreferencesResponse> => getPreferences(client, opts),
       update: (req: UpdatePreferencesRequest): Promise<UpdatePreferencesResponse> => updatePreferences(client, req),
+    } as const;
+  }
+
+  get contacts() {
+    const client = this.client;
+    return {
+      sync: (req: SyncContactsRequest): Promise<SyncContactsResponse> => syncContacts(client, req),
     } as const;
   }
 }
