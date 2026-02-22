@@ -1,6 +1,6 @@
 {
   "name": "@fluxomail/sdk",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Fluxomail SDK for JS/TS: send emails, list/subscribe to events, manage preferences, get timelines.",
   "type": "module",
   "main": "dist/index.js",
