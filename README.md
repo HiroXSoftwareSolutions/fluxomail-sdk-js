@@ -3,7 +3,7 @@
 ![CI](https://github.com/HiroXSoftwareSolutions/fluxomail-sdk-js/actions/workflows/ci.yml/badge.svg)
 [![npm version](https://img.shields.io/npm/v/%40fluxomail%2Fsdk.svg)](https://www.npmjs.com/package/@fluxomail/sdk)
 
-Tiny, robust SDK for Fluxomail's REST + SSE APIs. Focused on minutes-to-first-value: send, list events, subscribe to realtime events, manage preferences, and get a send's timeline.
+Tiny, robust SDK for Fluxomail's REST + SSE APIs. Focused on minutes-to-first-value: send, sync contacts, list events, subscribe to realtime events, manage preferences, and get a send's timeline.
 
 - ESM + TypeScript typings
 - Typed errors and request IDs for supportability
@@ -63,6 +63,10 @@ const { events, nextCursor } = await fm.events.list({
   mtaHost: 'mx.google.com',  // filter by remote MTA hostname
 })
 
+// Aggregate transactional performance (window preset or since timestamp)
+const metrics = await fm.metrics.get({ window: '7d' })
+console.log(metrics.metrics.deliveryRate)
+
 // Realtime events (works in Node and browser)
 const sub = fm.events.subscribe({
   types: ['email.*'],
@@ -85,6 +89,23 @@ const t = await fm.timelines.get({ sendId: 'send_abc123' })
 for await (const tev of fm.timelines.iterate({ sendId: 'send_abc123', limit: 100 })) {
   console.log('timeline', tev)
 }
+
+// Sync contacts (batch or realtime deltas)
+await fm.contacts.sync({
+  source: 'stripe',
+  idempotencyKey: 'contacts-sync-001',
+  idempotentRetry: 3,
+  contacts: [
+    {
+      email: 'user@example.com',
+      externalId: 'cus_123',
+      eventId: 'evt_0001',
+      subscribed: true,
+      metadata: { mrr: 79, country: 'US' },
+      sourceUpdatedAt: '2026-02-20T12:00:00Z',
+    }
+  ],
+})
 
 // Abort a long-running request (example)
 const ac = new AbortController()
@@ -139,9 +160,12 @@ fluxomail events list --api-key $FLUXOMAIL_API_KEY --types email.delivered --lim
 fluxomail events list --api-key $FLUXOMAIL_API_KEY --types email.delivered --domain gmail.com --smtp-code 250
 fluxomail events tail --api-key $FLUXOMAIL_API_KEY --types email.*
 fluxomail events backfill --api-key $FLUXOMAIL_API_KEY --types email.* --checkpoint-file .fluxomail.ckpt
+fluxomail metrics get --api-key $FLUXOMAIL_API_KEY --window 7d
 fluxomail timelines get --api-key $FLUXOMAIL_API_KEY --send-id send_abc123 --limit 100
 fluxomail preferences get --api-key $FLUXOMAIL_API_KEY --email user@example.com
 fluxomail preferences update --api-key $FLUXOMAIL_API_KEY --email user@example.com --unsubscribe marketing
+fluxomail contacts sync --api-key $FLUXOMAIL_API_KEY --file ./contacts.json --idempotency contacts-sync-001
+fluxomail contacts sync --api-key $FLUXOMAIL_API_KEY --file ./contacts.json --idempotency contacts-sync-001 --idempotent-retry 5
 fluxomail whoami --api-key $FLUXOMAIL_API_KEY
 
 # Init scaffolds
@@ -149,6 +173,15 @@ fluxomail init next ./      # writes pages/api/fluxomail/token.ts (creates dirs)
 fluxomail init worker ./    # writes examples/workers/worker.js
 fluxomail init next-app ./  # writes app/api/fluxomail/token/route.ts (creates dirs)
 ```
+
+User/contact sync templates:
+
+- `examples/user-sync/node-outbox-worker.mjs`
+- `examples/user-sync/convex/README.md`
+- `examples/user-sync/postgres/README.md`
+- `examples/user-sync/mongodb/README.md`
+- `examples/user-sync/supabase/README.md`
+- `examples/user-sync/prisma/README.md`
 
 ## Configuration
 

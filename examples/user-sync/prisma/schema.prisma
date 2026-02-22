@@ -1,0 +1,22 @@
+// Add this model to your Prisma schema.
+model FluxomailUserSyncOutbox {
+  id                  BigInt   @id @default(autoincrement())
+  eventId             String   @unique
+  userId              String
+  email               String
+  name                String?
+  subscribed          Boolean?
+  sourceUpdatedAt     BigInt?
+  deleted             Boolean  @default(false)
+  status              String   @default("pending")
+  attempts            Int      @default(0)
+  nextAttemptAt       DateTime @default(now())
+  processingLeaseUntil DateTime?
+  lastError           String?
+  syncedAt            DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+}
+

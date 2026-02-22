@@ -35,9 +35,11 @@ fluxomail <command> [options]
 Commands:
   send              Send an email
   send-global       Send via the global endpoint
+  contacts sync     Sync contacts (batch or realtime deltas)
   events list       List events (backfill)
   events tail       Stream events (SSE)
   events backfill   Backfill events and persist checkpoint
+  metrics get       Get aggregate transactional metrics
   timelines get     Get a send's timeline
   preferences get   Get contact subscription preferences
   preferences update  Update contact subscription preferences
@@ -55,7 +57,7 @@ Global options:
   --config <path>           Path to .fluxomailrc JSON (defaults: cwd then home)
 
 Send options:
-  --to <email>[,email]      Recipient(s)
+  --to <email>              Recipient email
   --from <email>            Sender (optional; server default used if omitted)
   --subject <text>
   --text <text>
@@ -78,6 +80,12 @@ Events list/tail/backfill options:
   --format <json|jsonl|pretty>
   --output <file>
 
+Metrics get options:
+  --window <24h|7d|30d|all> Preset lookback window (default 7d)
+  --since <ts|ISO>          Explicit lower bound (overrides window)
+  --format <json|pretty>    Output format (default pretty)
+  --output <file>
+
 Events backfill extra options:
   --checkpoint-file <path>  file to persist last event id
   --max-pages <n>
@@ -98,6 +106,13 @@ Preferences update options:
   --email <email>           Contact email (alternative to --token)
   --subscribe <key>         Subscribe to category (repeatable)
   --unsubscribe <key>       Unsubscribe from category (repeatable)
+
+Contacts sync options:
+  --file <path>             JSON payload file (object with contacts[], or raw contacts[] array)
+  --source <source>         Optional source override (e.g. stripe, hubspot)
+  --idempotency <key>       Request idempotency key
+  --idempotent-retry <n>    Retry transient sync failures (default 3)
+  --format <json|pretty>    Output format (default pretty)
 `);
 }
 
@@ -108,6 +123,17 @@ function runTokenCmd(cmd) {
       resolve(String(stdout || '').trim());
     });
   });
+}
+
+function normalizeContactsPayload(input) {
+  if (Array.isArray(input)) return { contacts: input };
+  if (!input || typeof input !== 'object') return null;
+  if (!Array.isArray(input.contacts)) return null;
+  return input;
+}
+
+function hasValidEventId(row) {
+  return !!(row && typeof row.eventId === 'string' && row.eventId.trim());
 }
 
 async function main() {
@@ -167,14 +193,14 @@ async function main() {
   });
 
   if (cmd === 'send' || cmd === 'send-global') {
-    const to = String(args.to || '');
+    const to = String(args.to || '').trim();
     const subject = String(args.subject || '');
     const text = args.text ? String(args.text) : undefined;
     const html = args.html ? String(args.html) : undefined;
     const idemp = args.idempotency ? String(args.idempotency) : undefined;
     if (!apiKey) { console.error('Missing --api-key or FLUXOMAIL_API_KEY'); process.exit(2); }
     if (!to || !subject || (!text && !html)) { console.error('send requires --to, --subject and one of --text/--html'); process.exit(2); }
-    const toList = to.includes(',') ? to.split(',').map(s=>s.trim()).filter(Boolean) : to;
+    if (to.includes(',')) { console.error('send supports exactly one --to recipient'); process.exit(2); }
     // cc/bcc parsing
     const cc = args.cc ? String(args.cc).split(',').map(s=>s.trim()).filter(Boolean) : undefined;
     const bcc = args.bcc ? String(args.bcc).split(',').map(s=>s.trim()).filter(Boolean) : undefined;
@@ -198,7 +224,7 @@ async function main() {
       const i = s.indexOf(':');
       if (i > 0) headers[s.slice(0, i).trim()] = s.slice(i + 1).trim();
     }
-    const sendReq = { to: toList, from: args.from, subject, text, html, cc, bcc, headers: Object.keys(headers).length ? headers : undefined, attachments: attachments.length ? attachments : undefined, idempotencyKey: idemp };
+    const sendReq = { to, from: args.from, subject, text, html, cc, bcc, headers: Object.keys(headers).length ? headers : undefined, attachments: attachments.length ? attachments : undefined, idempotencyKey: idemp };
     const useGlobal = cmd === 'send-global' || args.global === true;
     const res = useGlobal ? await fm.sends.sendGlobal(sendReq) : await fm.sends.send(sendReq);
     console.log(JSON.stringify(res, null, 2));
@@ -267,6 +293,23 @@ async function main() {
     return;
   }
 
+  if (cmd === 'metrics' && sub === 'get') {
+    if (!apiKey && !tokenCmd && !initialToken) { console.error('Missing auth: provide --api-key or --token-cmd'); process.exit(2); }
+    const window = args.window ? String(args.window) : undefined;
+    if (window && !['24h', '7d', '30d', 'all'].includes(window)) {
+      console.error('metrics get --window must be one of: 24h, 7d, 30d, all');
+      process.exit(2);
+    }
+    const since = args.since ? String(args.since) : undefined;
+    const format = (args.format ? String(args.format) : 'pretty').toLowerCase();
+    const outPath = args.output ? String(args.output) : undefined;
+    const res = await fm.metrics.get({ ...(window ? { window } : {}), ...(since ? { since } : {}) });
+    const text = format === 'json' ? JSON.stringify(res) : JSON.stringify(res, null, 2);
+    if (!args.quiet) console.log(text);
+    if (outPath) await writeFile(outPath, text + '\n');
+    return;
+  }
+
   if (cmd === 'preferences' && sub === 'get') {
     if (!apiKey && !tokenCmd && !initialToken) { console.error('Missing auth: provide --api-key or --token-cmd'); process.exit(2); }
     const token = args.token ? String(args.token) : undefined;
@@ -291,6 +334,65 @@ async function main() {
     ];
     const res = await fm.preferences.update({ token, email, subscriptions });
     console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (cmd === 'contacts' && sub === 'sync') {
+    if (!apiKey) { console.error('contacts sync requires --api-key or FLUXOMAIL_API_KEY'); process.exit(2); }
+    const filePath = args.file ? String(args.file) : '';
+    if (!filePath) { console.error('contacts sync requires --file <path>'); process.exit(2); }
+
+    let payloadRaw;
+    try {
+      payloadRaw = await readFile(filePath, 'utf8');
+    } catch (err) {
+      console.error(`Unable to read file: ${filePath}`);
+      process.exit(2);
+    }
+
+    let parsedInput;
+    try {
+      parsedInput = JSON.parse(payloadRaw);
+    } catch {
+      console.error('contacts sync payload must be valid JSON');
+      process.exit(2);
+    }
+
+    const parsed = normalizeContactsPayload(parsedInput);
+    if (!parsed) {
+      console.error('contacts sync payload must be an object with contacts[] or a raw contacts[] array');
+      process.exit(2);
+    }
+    if (!Array.isArray(parsed.contacts) || parsed.contacts.length === 0) {
+      console.error('contacts sync requires at least one contact');
+      process.exit(2);
+    }
+
+    const source = args.source ? String(args.source) : (parsed.source ? String(parsed.source) : undefined);
+    const idempotencyKey = args.idempotency ? String(args.idempotency) : undefined;
+    const idempotentRetryRaw = args['idempotent-retry'] ? Number(args['idempotent-retry']) : 3;
+    if (!Number.isFinite(idempotentRetryRaw) || idempotentRetryRaw < 1) {
+      console.error('contacts sync --idempotent-retry must be a positive number');
+      process.exit(2);
+    }
+    const idempotentRetry = Math.max(1, Math.floor(idempotentRetryRaw));
+    if (!idempotencyKey) {
+      const missingEventId = parsed.contacts.some((row) => !hasValidEventId(row));
+      if (missingEventId) {
+        console.error('contacts sync requires --idempotency or eventId on every contact row');
+        process.exit(2);
+      }
+    }
+
+    const format = (args.format ? String(args.format) : 'pretty').toLowerCase();
+    const res = await fm.contacts.sync({
+      ...(source ? { source } : {}),
+      contacts: parsed.contacts,
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+      idempotentRetry,
+    });
+    const text = format === 'json' ? JSON.stringify(res) : JSON.stringify(res, null, 2);
+    console.log(text);
     return;
   }
 

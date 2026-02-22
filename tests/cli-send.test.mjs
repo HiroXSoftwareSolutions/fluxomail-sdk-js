@@ -32,3 +32,21 @@ test('CLI send prints JSON and passes idempotency', async () => {
     await server.close();
   }
 });
+
+test('CLI send rejects multiple comma-separated recipients', async () => {
+  const server = await startTestServer({
+    'POST /emails/send': async (_req, res, _url) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ sendId: 'unexpected' }));
+    }
+  });
+  try {
+    const env = { ...process.env, FLUXOMAIL_API_KEY: 'k', FLUXOMAIL_BASE_URL: server.url };
+    const args = ['bin/fluxomail.mjs', 'send', '--to', 'a@example.com,b@example.com', '--subject', 'Hi', '--text', 'Hello'];
+    const child = spawn(process.execPath, args, { env, cwd: new URL('..', import.meta.url).pathname });
+    const code = await new Promise((r) => child.on('close', r));
+    assert.equal(code, 2);
+  } finally {
+    await server.close();
+  }
+});

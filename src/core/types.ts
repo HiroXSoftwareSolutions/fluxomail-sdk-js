@@ -48,6 +48,45 @@ export interface ListEventsResponse<T = unknown> {
   nextCursor?: string | null;
 }
 
+export interface GetMetricsOptions {
+  window?: '24h' | '7d' | '30d' | 'all';
+  since?: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  retry?: RetryPolicy;
+}
+
+export interface MetricsResponse {
+  window: {
+    preset: '24h' | '7d' | '30d' | 'all';
+    since: string;
+    until: string;
+  };
+  scanned: {
+    sends: number;
+    sendScanLimit: number;
+  };
+  metrics: {
+    totalSent: number;
+    totalDelivered: number;
+    deliveryRate: number;
+    totalOpened: number;
+    uniqueOpens: number;
+    avgOpenRate: number;
+    totalClicked: number;
+    uniqueClicks: number;
+    avgClickRate: number;
+    avgClickToOpenRate: number;
+    totalBounced: number;
+    bounceRate: number;
+    totalComplained: number;
+    complaintRate: number;
+    totalDelayed: number;
+    delayedRate: number;
+    [k: string]: unknown;
+  };
+}
+
 export interface SubscribeOptions {
   types?: string[];
   since?: string;
@@ -192,6 +231,51 @@ export interface UpdatePreferencesRequest {
 
 export interface UpdatePreferencesResponse {
   ok: true;
+}
+
+// Contact Sync
+export type ContactPlan = 'free' | 'pro' | 'unlimited' | 'lifetime';
+
+export interface ContactSyncContact {
+  email: string;
+  externalId?: string;
+  name?: string;
+  plan?: ContactPlan;
+  subscribed?: boolean;
+  categories?: string[];
+  metadata?: Record<string, Json>;
+  sourceUpdatedAt?: number | string;
+  planStartedAt?: number | string;
+  planEndsAt?: number | string;
+  state?: string;
+  eventId?: string;
+  deleted?: boolean;
+}
+
+export interface SyncContactsRequest {
+  source?: string;
+  contacts: ContactSyncContact[];
+  idempotencyKey?: string;
+  /** Retry transient failures. Safe when idempotencyKey is provided or every row has eventId. Default: 3 */
+  idempotentRetry?: number;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+export interface SyncContactsResponse {
+  ok: boolean;
+  source: string;
+  processed: number;
+  created: number;
+  updated: number;
+  failed: number;
+  skippedStale: number;
+  skippedDuplicate: number;
+  unsubscribed: number;
+  resubscribed: number;
+  replayed?: boolean;
+  syncedAt?: number;
+  errors?: Array<{ email: string; message: string }>;
 }
 
 // Templates (deprecated — no backend implementation exists)
