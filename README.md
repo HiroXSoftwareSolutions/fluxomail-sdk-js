@@ -107,6 +107,29 @@ await fm.contacts.sync({
   ],
 })
 
+// Build an authenticated audience export feed from your source of truth
+import { audience } from '@fluxomail/sdk'
+
+const exportHandler = audience.createAudienceExport({
+  authToken: process.env.FLUXOMAIL_AUDIENCE_EXPORT_TOKEN!,
+  fetchPage: async (_ctx, cursor) => {
+    const rows = await loadContactsFromYourDb(cursor)
+    return {
+      rows,
+      nextCursor: rows.nextCursor,
+    }
+  },
+  mapRow: (row) => ({
+    email: row.email,
+    name: row.name,
+    plan: row.plan,
+    unsubscribed: row.unsubscribed,
+    categories: row.categories,
+    metadata: row.metadata,
+    updatedAt: row.updatedAt,
+  }),
+})
+
 // Abort a long-running request (example)
 const ac = new AbortController()
 const p = fm.events.list({ types: ['email.*'], limit: 1000, signal: ac.signal })
@@ -182,6 +205,12 @@ User/contact sync templates:
 - `examples/user-sync/mongodb/README.md`
 - `examples/user-sync/supabase/README.md`
 - `examples/user-sync/prisma/README.md`
+
+Audience export helpers:
+
+- `audience.createAudienceExport(...)` builds a bearer-protected JSON feed that returns normalized `contacts` and `nextCursor`.
+- `audience.normalizeAudienceRecord(...)` and `audience.validateAudienceRecords(...)` normalize plans, categories, and timestamps before export.
+- The audience module is an SDK export helper. It is not a `fluxomail audience ...` CLI command and it does not upsert contacts into Fluxomail by itself.
 
 ## Configuration
 
